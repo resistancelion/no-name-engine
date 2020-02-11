@@ -1,0 +1,853 @@
+﻿unit Scripts;
+
+interface
+
+uses Classes, Vcl.Forms, Vcl.Dialogs, Vcl.Controls, Vcl.StdCtrls, SysUtils,
+  Windows, zendAPI, ZendTypes, WideStrUtils, variants, rtti, System.TypInfo,
+  DelphiPhp5, WPDFunction, PHPTypes, Generics.Collections;
+{
+  procedure VariantControlVCL(ht: Integer; return_value: pzval;
+  return_value_ptr: ppzval; this_ptr: pzval; return_value_used: Integer;
+  TSRMLS_DC: Pointer); cdecl;
+
+  procedure GuiOptSet(ht: Integer; return_value: pzval; return_value_ptr: ppzval;
+  this_ptr: pzval; return_value_used: Integer; TSRMLS_DC: Pointer); cdecl;
+
+}
+procedure FindControlVCL(ht: Integer; return_value: pzval;
+  return_value_ptr: ppzval; this_ptr: pzval; return_value_used: Integer;
+  TSRMLS_DC: Pointer); cdecl;
+
+procedure TestVariant(ht: Integer; return_value: pzval;
+  return_value_ptr: ppzval; this_ptr: pzval; return_value_used: Integer;
+  TSRMLS_DC: Pointer); cdecl;
+
+procedure WPDIsClassVcl(ht: Integer; return_value: pzval;
+  return_value_ptr: ppzval; this_ptr: pzval; return_value_used: Integer;
+  TSRMLS_DC: Pointer); cdecl;
+
+type
+  TEventData = class
+  protected
+    fValue: pzval;
+    fValue2: pzval;
+    fTSRMLS_DC: Pointer;
+  protected
+  public
+    constructor Create(Value: pzval; Value2: pzval = nil;
+      TSRMLS_DC: Pointer = nil);
+  end;
+
+ TPhpEvent = class(TPersistent)
+    strict private
+      CommonMethod: TMethod;
+      FCtx : TRttiContext;
+    public
+      class var stopAllEvents: boolean;
+      constructor Create(Sender: TObject; EventName: string; phpobj, method_name : pzval; TSRMLS_DC : pointer);
+      property  EventHandler : TMethod read CommonMethod;
+    protected
+ end;
+
+
+implementation
+
+constructor TEventData.Create(Value: pzval; Value2: pzval = nil;
+  TSRMLS_DC: Pointer = nil);
+begin
+  MAKE_STD_ZVAL(fValue);
+  ZvalVAL(fValue, ZvalGetStringA(Value^));
+  // fValue := Value;
+
+  fValue2 := Value2;
+  fTSRMLS_DC := TSRMLS_DC;
+end;
+
+
+constructor TPhpEvent.Create(Sender: TObject; EventName: string; phpobj, method_name : pzval; TSRMLS_DC : pointer);
+var
+  selfType:     TRttiType;
+  handlerImpl:  TMethodImplementationCallback;
+  eventSig:     TRttiMethod;
+  methodImp:    TMethodImplementation;
+  metArgs:      TArray<TRttiParameter>;
+  i:            integer;
+  returnVal:    array of boolean;
+begin
+  FCtx      := TRttiContext.Create();
+  selfType  := FCtx.GetType(self.ClassType);
+  eventSig  := selfType.GetMethod(EventName);
+  if not assigned(eventSig) then
+     ShowMessage('[TPhpEvent.Create] Undefined event signature for ' + EventName);
+
+  metArgs := eventSig.GetParameters;
+  SetLength(returnVal, High(metArgs) + 1);
+
+  // Для процедур в которые параметры передаются по ссылке delphi ( var Key: <TYPE>; )
+  for i := 0 to High(metArgs) do
+    // (pfVar, pfConst, pfArray, pfAddress, pfReference, pfOut, pfResult)
+    if ((pfVar in metArgs[i].Flags) or (pfOut in metArgs[i].Flags) or (pfResult in metArgs[i].Flags)) then
+      returnVal[i] := true
+    else
+      returnVal[i] := false;
+
+  handlerImpl := procedure(UserData: Pointer; const Args: TArray<TValue>; out Result: TValue)
+  var
+    phpArgs:    pzval_array;
+    phpVars:    array of pzval;
+    phpReturn:  pzval;
+    zoid:       pointer;
+    i:          integer;
+  begin
+      if stopAllEvents OR Vcl.Forms.Application.Terminated then
+        exit;
+
+      try
+        SetLength(phpArgs, Length(Args) - 1);
+        SetLength(phpVars, Length(Args) - 1);
+        for i := 1 to high(Args) do begin
+
+        //   zvalval
+
+         // TValueToPZval(phpVars[i - 1], Args[i], true, TSRMLS_DC);
+
+             showmessage('regr');
+
+          phpArgs[i - 1] := @phpVars[i - 1];
+        end;
+
+        phpReturn := nil;
+      //  dw_call_user_function(phpobj, method_name, Length(Args) - 1, phpArgs, @phpReturn, TSRMLS_DC);
+      //  dw_zfree(phpReturn);
+           {
+        // после вызова процедуры/метода обрабатываем ссылки и освобождаем память от параметров-звалов
+        for i := 1 to high(Args) do begin
+          // далее следует обработка передачи параметров по ссылкам delphi ( var Key: <TYPE>; )
+          //TMessageEvent(var Msg: TMsg; var Handled: Boolean); virtual; abstract;
+          if returnVal[i - 1] then begin
+            // хрен знает как так получилось что это работает именно тогда если в пыхе у переменной стоит & т.е.
+            // именно так как должно быть в идеале.
+            if (phpVars[i - 1]^._type <> IS_ARRAY) then
+              Args[i] := pZvalToTValue(eventSig.GetParameters[i - 1].ParamType, phpVars[i - 1], false, TSRMLS_DC);
+          end;
+
+          //После завершения вызова фнкции из пхп, надо зачистить все звалы которые мы для неё создали.
+          if (phpVars[i - 1]^._type = IS_ARRAY) AND (Args[i].Kind in [tkClassRef, tkRecord, tkInterface]) then begin
+            // АХТУНГ! Зачистку скастованных объектов должен делать сам пользователь
+            // АХТУНГ! Если пользователь кастует массив в объкт, обязательно надо ставить & в определинии процедуры
+            if zend_hash_find(phpVars[i - 1]^.value.ht, 'obj_id', 7, zoid) = SUCCESS then begin
+              //pre(TObject(pzval(zoid^)^.value.lval).QualifiedClassName );
+              TObject(pzval(zoid^)^.value.lval).Free;
+              dw_zfree(pzval(zoid^));
+            end;
+          end;
+          dw_zfree(phpVars[i - 1]);
+        end;         }
+        phpArgs := nil;
+        phpVars := nil;
+
+      except
+        on E: Exception do begin
+          if stopAllEvents OR Vcl.Forms.Application.Terminated then
+            exit;
+          //zerror(E_ERROR, '%s: %s', [E.ClassName, E.Message])
+          ShowMessage(Format('@FIXME реализуй ошибко обрабатыватель через ПЫХ! Ошипппка: %s: %s', [E.ClassName, E.Message]));
+        end;
+
+
+      end;
+  end;
+
+  methodImp := eventSig.CreateImplementation(self, handlerImpl);
+  CommonMethod.data := Sender;
+  CommonMethod.Code := methodImp.CodeAddress;
+end;
+
+var
+  EngineWPDTRc: TRttiContext;
+
+procedure WPDNotifyEvent(a, a2, a3:va_list);
+var
+  eventData: TEventData;
+  Func: pzval;
+  Return: pzval;
+  Args:pzval;
+  fci: Pzend_fcall_info;
+  fcc: Pzend_fcall_info_cache;
+
+
+  callback, _object:pzval;
+  retval_ptr:pzval;
+begin
+
+
+ // eventData := TEventData(Sender);
+
+  //ShowMessage( TVarData(Sender).VType.ToString );
+               {
+   MAKE_STD_ZVAL(Func);
+   ZvalVAL(Func, 'TestOnClick2');
+   new(fci);
+   new(fcc);
+   zend_fcall_info_init(Func, 0, fci, fcc, NIL, NIL, TEngineWPD().TSRMLS_D);
+
+             }
+  {
+   //MAKE_STD_ZVAL(Return^);
+
+   MAKE_STD_ZVAL(Args);
+   MAKE_STD_ZVAL(Func);
+   MAKE_STD_ZVAL(Return);
+   ZvalVAL(Func, 'TestOnClick2');
+
+   new(fci);
+   new(fci_cache);
+
+   array_init(Return, true);
+
+   fci.size := SizeOf(fci);
+   fci.function_name := Func;
+   fci.function_table := GetExecutorGlobals.function_table;
+   fci.retval_ptr_ptr := @Return;
+ //  fci.param_count := 0;
+ //  fci.params := nil;
+   fci.no_separation := false;
+   zend_fcall_info_call(fci, fci_cache, nil, nil, TEngineWPD().TSRMLS_D);
+
+       }
+  // ShowMessage( GetExecutorGlobals.function_table. );
+  // GetExecutorGlobals.function_table.
+
+ { Func := emalloc(sizeof(zval));
+  Func^.refcount__gc := 1;
+  Func^.is_ref__gc := 0;
+  ZvalVAL(Func, 'TestOnClick2');
+
+  Return := emalloc(sizeof(zval));
+  Return^.refcount__gc := 1;
+  Return^.is_ref__gc := 0;
+  ZvalVAL(Return^, False);
+                }
+ // SetLength(Args, 0);
+
+ // call_user_function_ex(GetExecutorGlobals.function_table, nil, Func, Return, 0,
+   // Args, 0, nil, ts_resource_ex(0, nil));
+
+  {
+    ZvalVAL(Func, 'TestOnClick');
+    new(fci);
+    fci.size := sizeof(fci);
+    fci.function_table := GetExecutorGlobals.function_table;
+    //fci.function_name := &Func;
+    fci.symbol_table := nil;
+    fci.object_ptr := nil;
+    //fci.retval_ptr_ptr := Return;
+    fci.param_count := 0;
+    fci.params := nil;
+    fci.no_separation := true;
+
+    new(fci_cache1);
+    fci_cache1.initialized := true;
+    fci_cache1.function_handler := GetExecutorGlobals.autoload_func;
+    fci_cache1.calling_scope := nil;
+    fci_cache1.called_scope := nil;
+    fci_cache1.object_ptr := nil;
+
+    zend_call_function(fci, fci_cache1, TEngineWPD().TSRMLS_D);
+  }
+  {
+    MAKE_STD_ZVAL(Return);
+    MAKE_STD_ZVAL(Func);
+    ZvalVAL(Func,  ZvalGetStringA(eventData.fValue^) );
+
+
+    // ZvalVAL(Func, ZvalGetStringA(eventData.fValue^) );
+    //  ShowMessage( eventData.fValue^._type.ToString );
+    SetLength(Args, 0);
+
+    ShowMessage( ZvalGetStringA(Func^) );
+
+    call_user_function(
+    GetExecutorGlobals.function_table,
+    nil,
+    Func,
+    Return,
+    0,
+    args,
+    TEngineWPD().TSRMLS_D
+    ); }
+
+
+
+
+  // ShowMessage( eventData.fValue. );
+  { MAKE_STD_ZVAL(Return);
+    MAKE_STD_ZVAL(Func);
+
+
+    SetLength(Args, 0);
+
+    MAKE_STD_ZVAL(args[0]);
+    args[0] := eventData.fValue2;
+
+
+    call_user_function( eventData.fValue.value.ht, nil,Func, Return, 1, args, eventData.fTSRMLS_DC );
+  }
+  // ShowMessage(eventData.fValue2._type.ToString());
+
+end;
+
+procedure WPDEvent1(a:TObject; a1:va_list);
+var
+  eventData: TEventData;
+  php: TpsvCustomPHP;
+begin
+  eventData := TEventData(a);
+
+// php := TEngineWPD();
+ // php.RunCode('<?php' + ' pre( phpversion() );' + ' ?>');
+end;
+
+
+
+
+type
+  TParamData = record
+    Flags: TParamFlags;
+    ParamName: ShortString;
+    TypeName: ShortString;
+    // beware: string length varies!!!
+  end;
+  PParamData = ^TParamData;
+
+  TEventContainer = record
+    oid:                integer;
+    EventPropertyName:  PAnsiChar;
+    phpObject:          pzval;
+    functionName:       pzval;
+    cls:                TPhpEvent;
+  end;
+
+ var
+ events: array of TEventContainer;
+
+         {
+
+constructor TEventChain<T>.Create();
+var st: TRttiType;
+    et : TRttiType;
+    handlerImpl : TMethodImplementationCallback;
+    eventSig : TRttiMethod;
+    m : TMethod;
+    mi : TMethodImplementation;
+begin
+    inherited;
+    FItems := TList<T>.Create();
+
+    FCtx := TRttiContext.Create();
+    st := FCtx.GetType(self.ClassType);
+
+    et := FCtx.GetType(typeinfo(T));
+    if not (et is TRttiMethodType)then
+        raise EEventChainException.Create('invalid event type');
+
+    eventSig := st.GetMethod('EventHandlerSignature');
+    if not assigned(eventSig) then
+        raise EEventChainException.Create('undefined event signature');
+
+    handlerImpl := procedure(UserData: Pointer; const Args: TArray;
+                            out Result: TValue)
+                   var e : TMethod;
+                     //  tm : T;
+                   begin
+                    //  for tm in FItems do begin
+                    //      e := TMethod((@tm)^);
+                    //      result := Invoke(e.Code, args, eventSig.CallingConvention, nil);
+                   //   end;
+                   end;
+
+
+ handlerImpl := procedure(UserData: Pointer; const Args: TArray<TValue>; out Result: TValue)
+  var
+    phpArgs:    pzval_array;
+    phpVars:    array of pzval;
+    phpReturn:  pzval;
+    zoid:       pointer;
+    i:          integer;
+  begin
+
+  end;
+
+    mi := eventSig.CreateImplementation(self, handlerImpl);
+
+    m.data := self;
+    m.Code := mi.CodeAddress;
+    FEvent := T((@m)^);
+end;
+          }
+procedure Event1(sender: TObject);
+begin
+    ShowMessage('event 1');
+end;
+
+
+function ParEx(Instance: TRttiType; ap: pointer; Value: pzval; fValue: pzval = nil;
+  TSRMLS_DC: Pointer = nil): TValue;
+var
+  ResultType: Pointer;
+  Method: TMethod;
+  Method2: TRttiMethod;
+  eventData: TEventData;
+  // AValue:pzval;
+
+
+
+  Line: string;
+  pTypeString, pReturnString: ^ShortString;
+
+  ptd: PTypeData;
+  pti: PTypeInfo;
+  pParam: PParamData;
+  nParam, I: Integer;
+  def:TRttiType;
+  eger:PPropInfo;
+  TempList: PPropList;
+  p:TRttiType;
+  et : TRttiType;
+
+  GVDRG:TVirtualInterface;
+
+  handlerImpl : TMethodImplementationCallback;
+  mi : TMethodImplementation;
+begin
+
+  if TObject(ap) is TRttiMethod then
+  begin
+    p := TRttiMethod(ap).ReturnType;
+  end else if TObject(ap) is TRttiIndexedProperty then
+  begin
+    p := TRttiIndexedProperty(ap).PropertyType;
+  end else if TObject(ap) is TRttiProperty then
+  begin
+    p := TRttiProperty(ap).PropertyType;
+  end else if TObject(ap) is TRttiField then
+  begin
+    p := TRttiField(ap).FieldType;
+  end else if TObject(ap) is TRttiParameter then
+  begin
+    p := TRttiParameter(ap).ParamType;
+  end;
+
+
+  case p.TypeKind of
+    tkMethod:
+      begin
+
+      end;
+    tkClass:
+      Result := TObject(ZvalGetInt(Value^));
+    tkClassRef:
+      Result := TClass(ZvalGetInt(Value^));
+    tkPointer:
+      begin
+        ResultType := nil;
+        if (p.Name = 'PWideChar') or (p.Name = 'PChar') then
+          ResultType := StringToOleStr(ZvalGetString(Value^))
+        else if p.Name = 'PAnsiChar' then
+          ResultType := PAnsiChar(ZvalGetStringA(Value^))
+        else if p.Name = 'PAnsiString' then
+          ResultType := PAnsiString(ZvalGetStringA(Value^));
+
+        if assigned(ResultType) then
+          TValue.Make(@ResultType, p.Handle, Result)
+        else
+          Result := Pointer(ZvalGetInt(Value^));
+      end;
+    tkInteger:
+      Result := ZvalGetInt(Value^);
+    tkChar:
+      Result := ZvalGetStringA(Value^)[1];
+    tkFloat:
+      Result := ZvalGetDouble(Value^);
+    tkString:
+      Result := TValue.From<ShortString>(ShortString(ZvalGetStringA(Value^)));
+    tkWChar:
+      Result := ZvalGetString(Value^)[1];
+    tkLString:
+      Result := ZvalGetStringA(Value^);
+    tkWString:
+      Result := ZvalGetString(Value^);
+    tkInt64:
+      Result := StrToInt64(ZvalGetStringA(Value^));
+    tkUString:
+      Result := ZvalGetString(Value^);
+    tkEnumeration:
+      Result := TValue.FromOrdinal(p.Handle, GetEnumValue(p.Handle,
+        ZvalGetString(Value^)));
+    tkUnknown:
+      begin
+        case Value^._type of
+          IS_LONG:
+            Result := ZvalGetInt(Value^);
+          IS_DOUBLE:
+            Result := ZvalGetDouble(Value^);
+          IS_BOOL:
+            Result := ZvalGetBool(Value^);
+          IS_STRING:
+            Result := ZvalGetStringA(Value^);
+        end;
+      end
+  else
+  begin
+    ShowMessage('Реализовать ' + GetEnumName(p.Handle, Ord(p.TypeKind)) +'! (ParEx)');
+    Result := nil;
+  end;
+  end;
+end;
+
+function Par(Instance: TRttiType; T: TArray<TRttiParameter>; Args: pzval): TArray<TValue>;
+var
+  p: TRttiParameter;
+  I: Integer;
+  tmp: ppzval;
+begin
+  Result := nil;
+  if Length(T) = Args.Value.ht.nNumOfElements then
+  begin
+    SetLength(Result, Length(T));
+    I := 0;
+    for p in T do
+    begin
+      ZValArrayKeyFind(Args, I, tmp);
+
+      if p.ParamType = nil then
+        Result[I] := Pointer(ZvalGetInt(tmp^^))
+      else
+        Result[I] := ParEx(Instance, p, tmp^);
+      inc(I);
+    end;
+  end;
+end;
+
+procedure TestSetRet(return_value: pzval; Result: TValue);
+begin
+  ZvalVAL(return_value);
+
+  if Result.Kind = tkRecord then
+  else if Result.Kind = tkClass then
+    ZvalVAL(return_value, Integer(Result.AsObject))
+  else if Result.Kind = tkClassRef then
+    ZvalVAL(return_value, Integer(Result.AsClass))
+  else if Result.Kind = tkFloat then
+    ZvalVAL(return_value, Result.AsExtended)
+  else if Result.Kind = tkInteger then
+    ZvalVAL(return_value, Integer(Result.AsInteger))
+  else if Result.Kind = tkInt64 then
+    ZvalVAL(return_value, Integer(Result.AsInt64))
+  else
+    ZvalVAL(return_value, Result.ToString);
+end;
+
+procedure TestVariant;
+var
+  ZSelf, ZName, Zargs, ZSuccess: ppzval;
+  ZOwner, ZOwnerSelf: ppzval;
+  ZW: uint;
+
+  TRttiIT: TRttiType;
+  Instance: TRttiType;
+  AName: string;
+
+  TMethod: TRttiMethod;
+  TPropertyIdx: TRttiIndexedProperty;
+  TProperty: TRttiProperty;
+  TField: TRttiField;
+  TParameter: TRttiParameter;
+
+  Args: TArray<TValue>;
+  NumParams, Num, I, selfOBJ: Integer;
+  SetType: TValue;
+  tmp, tmp2: ppzval;
+  Kind: TTypeKind;
+begin
+  ZvalVAL(return_value);
+  if (ht >= 3) and (ht <= 4) then
+    if (ZvalGetArgs(ht, @ZSelf, @ZName, @Zargs, @ZSuccess) = SUCCESS) then
+    begin
+      if (ZSelf^._type = IS_ARRAY) and (Zargs^._type = IS_ARRAY) then
+      begin
+        ZW := ZSelf^.Value.ht.nNumOfElements;
+        if ZW >= 1 then
+          ZValArrayKeyFind(ZSelf^, 0, ZOwner);
+        if ZW >= 2 then
+          ZValArrayKeyFind(ZSelf^, 1, ZOwnerSelf);
+      end
+      else
+        Exit;
+
+      if ht = 4 then
+        ZvalVAL(ZSuccess^, false);
+
+      selfOBJ := ZvalGetInt(ZOwner^^);
+      if selfOBJ = 0 then
+        Exit;
+
+      TRttiIT := TRttiType(selfOBJ);
+      if TRttiIT <> nil then
+      begin
+        AName := ZvalGetStringA(ZName^^);
+
+        TMethod := TRttiIT.GetMethod(AName);
+        if (TMethod = nil) and (ZW = 2) then
+        begin
+
+          selfOBJ := ZvalGetInt(ZOwnerSelf^^);
+          if selfOBJ = 0 then
+            Exit;
+          Instance := TRttiType(selfOBJ);
+
+          Num := Zargs^^.Value.ht.nNumOfElements;
+          TPropertyIdx := EngineWPDTRc.GetType(Instance.ClassInfo)
+            .GetIndexedProperty(AName);
+          if TPropertyIdx <> nil then
+          begin
+            if ht = 4 then
+              ZvalVAL(ZSuccess^, true);
+
+            NumParams := Length(TPropertyIdx.ReadMethod.GetParameters);
+
+            SetLength(Args, NumParams);
+            I := 0;
+            for TParameter in TPropertyIdx.ReadMethod.GetParameters do
+            begin
+              ZValArrayKeyFind(Zargs^, I, tmp);
+              Args[I] := ParEx(Instance, TParameter, tmp^);
+              inc(I);
+            end;
+
+            if (NumParams = Num) and TPropertyIdx.IsReadable then
+              TestSetRet(return_value, TPropertyIdx.GetValue(Instance, Args))
+            else if (NumParams = Num - 1) and TPropertyIdx.IsWritable then
+            begin
+              ZValArrayKeyFind(Zargs^, Num - 1, tmp);
+              TPropertyIdx.SetValue(Instance, Args,
+                ParEx(Instance, TPropertyIdx, tmp^));
+            end;
+          end
+          else
+          begin
+            TProperty := EngineWPDTRc.GetType(Instance.ClassInfo)
+              .GetProperty(AName);
+
+
+            if TProperty <> nil then
+            begin
+
+              if ht = 4 then
+                ZvalVAL(ZSuccess^, true);
+
+              if TProperty.IsWritable and (Num = 1) or (Num = 2) then
+              begin
+                if Num = 1 then
+                begin
+                  ZValArrayKeyFind(Zargs^, 0, tmp);
+                  TProperty.SetValue(Instance,
+                    ParEx(Instance, TProperty, tmp^));
+                end
+                else if Num = 2 then
+                begin
+                  ZValArrayKeyFind(Zargs^, 0, tmp);
+                  ZValArrayKeyFind(Zargs^, 1, tmp2);
+
+                  TProperty.SetValue(Instance, ParEx(Instance, TProperty,
+                    tmp^, tmp2^, TSRMLS_DC))
+                end;
+
+              end
+              else if TProperty.IsReadable then
+                TestSetRet(return_value, TProperty.GetValue(Instance))
+            end
+            else
+            begin
+              TField := EngineWPDTRc.GetType(Instance.ClassInfo)
+                .GetField(AName);
+              if TField <> nil then
+              begin
+                if ht = 4 then
+                  ZvalVAL(ZSuccess^, true);
+
+                if Num = 1 then
+                begin
+                  ZValArrayKeyFind(Zargs^, 0, tmp);
+                  TField.SetValue(Instance, ParEx(Instance, TField, tmp^));
+                end
+                else
+                  TestSetRet(return_value, TField.GetValue(Instance));
+              end
+            end;
+          end;
+        end
+        else if TMethod <> nil then
+        begin
+          if ht = 4 then
+            ZvalVAL(ZSuccess^, true);
+
+          Args := Par(TRttiIT, TMethod.GetParameters, Zargs^);
+
+          if ZW = 2 then
+            selfOBJ := ZvalGetInt(ZOwnerSelf^^);
+
+          if TMethod.MethodKind in [mkConstructor, mkClassProcedure,
+            mkClassFunction, mkClassConstructor, mkClassDestructor] then
+          begin
+            TestSetRet(return_value,
+              TMethod.Invoke(TRttiIT.AsInstance.MetaclassType, Args));
+          end
+          else if TRttiIT.AsInstance.MetaclassType.InheritsFrom(TApplication)
+          then
+            TestSetRet(return_value, TMethod.Invoke(Application, Args))
+          else if (selfOBJ <> 0) and (ZW = 2) then
+          begin
+            Kind := EngineWPDTRc.GetType(TRttiType(selfOBJ).ClassInfo)
+              .Handle.Kind;
+            if Kind = tkClass then
+              TestSetRet(return_value, TMethod.Invoke(TObject(selfOBJ), Args))
+            else if Kind = tkClassRef then
+              TestSetRet(return_value, TMethod.Invoke(TClass(selfOBJ), Args));
+          end;
+
+          NumParams := Length(TMethod.GetParameters);
+
+          if NumParams <> 0 then
+          begin
+            for I := 0 to NumParams - 1 do
+              if (pfVar in TMethod.GetParameters[I].Flags) or
+                (pfOut in TMethod.GetParameters[I].Flags) then
+              begin
+                ZValArrayKeyFind(Zargs^, I, tmp);
+                TestSetRet(tmp^, Args[I]);
+              end;
+          end;
+
+        end;
+      end;
+    end;
+end;
+
+procedure FindControlVCL;
+var
+  Args1: ppzval;
+  ClassName: string;
+begin
+  ZvalVAL(return_value, 0);
+
+  if (ZvalGetArgs(ht, @Args1) = SUCCESS) then
+  begin
+    ClassName := StringReplace(Args1^.Value.str.val, '\', '.',
+      [rfReplaceAll, rfIgnoreCase]);
+
+    if Copy(ClassName, 0, 1) = '.' then
+      ClassName := Copy(ClassName, 2);
+
+    if Copy(ClassName, 0, 7).ToLower = 'dclass.' then
+      ClassName := Copy(ClassName, 8);
+
+    ZvalVAL(return_value, Integer(EngineWPDTRc.FindType(ClassName)));
+  end;
+end;
+
+procedure WPDIsClassVcl;
+var
+  ZSelf, ZName: ppzval;
+  ZOwner, ZOwnerSelf: ppzval;
+  ZW: uint;
+
+  TRttiIT: TRttiType;
+  Instance: TRttiType;
+  AName: string;
+
+  TMethod: TRttiMethod;
+  TPropertyIdx: TRttiIndexedProperty;
+  TProperty: TRttiProperty;
+  TField: TRttiField;
+  TParameter: TRttiParameter;
+
+  Args: TArray<TValue>;
+  NumParams, I, selfOBJ: Integer;
+  SetType: TValue;
+  tmp: ppzval;
+  Kind: TTypeKind;
+  ret: pzval;
+begin
+  ZvalVAL(return_value);
+
+  if ht = 2 then
+    if (ZvalGetArgs(ht, @ZSelf, @ZName) = SUCCESS) then
+    begin
+      if ZSelf^._type = IS_ARRAY then
+      begin
+        ZW := ZSelf^.Value.ht.nNumOfElements;
+        if ZW >= 1 then
+          ZValArrayKeyFind(ZSelf^, 0, ZOwner);
+        if ZW >= 2 then
+          ZValArrayKeyFind(ZSelf^, 1, ZOwnerSelf);
+      end
+      else
+        Exit;
+
+      selfOBJ := ZvalGetInt(ZOwner^^);
+      if selfOBJ = 0 then
+        Exit;
+
+      TRttiIT := TRttiType(selfOBJ);
+      if TRttiIT <> nil then
+      begin
+        AName := ZvalGetStringA(ZName^^);
+
+        TMethod := TRttiIT.GetMethod(AName);
+        if (TMethod = nil) and (ZW = 2) then
+        begin
+
+          selfOBJ := ZvalGetInt(ZOwnerSelf^^);
+          if selfOBJ = 0 then
+            Exit;
+          Instance := TRttiType(selfOBJ);
+          TPropertyIdx := EngineWPDTRc.GetType(Instance.ClassInfo)
+            .GetIndexedProperty(AName);
+          if TPropertyIdx <> nil then
+          begin
+            if TPropertyIdx.PropertyType.TypeKind in [tkClass, tkClassRef] then
+            begin
+              ZvalVAL(return_value, TPropertyIdx.PropertyType.QualifiedName);
+            end
+          end
+          else
+          begin
+            TProperty := EngineWPDTRc.GetType(Instance.ClassInfo)
+              .GetProperty(AName);
+            if TProperty <> nil then
+            begin
+              if TProperty.PropertyType.TypeKind in [tkClass, tkClassRef] then
+              begin
+                ZvalVAL(return_value, TProperty.PropertyType.QualifiedName);
+              end
+            end
+            else
+            begin
+              TField := EngineWPDTRc.GetType(Instance.ClassInfo)
+                .GetField(AName);
+              if TField <> nil then
+              begin
+                if TField.FieldType.TypeKind in [tkClass, tkClassRef] then
+                begin
+                  ZvalVAL(return_value, TField.FieldType.QualifiedName);
+                end;
+              end;
+            end;
+          end;
+        end
+      end;
+    end;
+end;
+
+end.

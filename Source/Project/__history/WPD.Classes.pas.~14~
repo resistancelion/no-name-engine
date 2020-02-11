@@ -1,0 +1,37 @@
+unit WPD.Classes;
+
+interface
+  Uses Classes, Generics.Collections;
+function RegisterClassAlias(ClassName: TPersistentClass; Alias: TPersistentClass): Boolean; overload;
+function RegisterClassAlias(ClassName: String; Alias: String): Boolean; overload;
+
+var
+  ListClassAlias: TDictionary<String, String>;
+implementation
+
+function RegisterClassAlias(ClassName: TPersistentClass; Alias: TPersistentClass): Boolean; overload;
+var tmp: String;
+begin
+  Result := True;
+  if not ListClassAlias.TryGetValue(ClassName.ClassName, tmp) then
+    ListClassAlias.Add(ClassName.ClassName, Alias.ClassName)
+  else
+    Result := False;
+end;
+
+function RegisterClassAlias(ClassName: String; Alias:String): Boolean; overload;
+var tmp: String;
+begin
+  Result := True;
+  if not ListClassAlias.TryGetValue(ClassName, tmp) then
+    ListClassAlias.Add(ClassName, Alias)
+  else
+    Result := False;
+end;
+
+Initialization
+  ListClassAlias := TDictionary<String,String>.Create;
+
+Finalization
+  ListClassAlias.Destroy;
+end.

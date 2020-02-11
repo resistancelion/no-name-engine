@@ -1,0 +1,80 @@
+unit WPD.Vis;
+
+interface
+
+uses
+  System.Types,
+  System.Classes
+  {$IF Defined(FMX)}
+  , WPD.FmxForm,
+  System.Messaging,
+  FMX.Consts, FMX.Types, FMX.dialogs
+  {$ELSEIF Defined(VCL)}
+  , VCL.Forms,
+  VCL.Dialogs
+  {$ELSE}
+  {$ENDIF}
+  {$IF Defined(VCL) or Defined(FMX)}
+  , System.UITypes;
+
+var
+  _init: Boolean = True;
+{$ELSE}
+  ;
+{$ENDIF}
+procedure Out(What: String; E: Boolean = False);
+
+implementation
+procedure Out(What: String; E: Boolean = False);
+{$IF Defined(FMX)}
+Begin
+  if E then
+       MessageDlg( What, TMsgDlgType.mtWarning, [TMsgDlgBtn.mbOK], 0 )
+  ELse
+    ShowMessage(What);
+End;
+{$ELSEIF Defined(VCL)}
+Begin
+  if E then
+       MessageDlg( What, mtWarning, [mbOK], 0 )
+  ELse
+    ShowMessage(What);
+End;
+{$ELSE}
+Begin
+  if E then
+  begin
+    WriteLn(Output, 'Error:');
+    WriteLn(What);
+  end
+  else
+    WriteLn(Output, What);
+  ReadLn(Input);
+End;
+{$ENDIF}
+
+{$IF Defined(FMX)}
+constructor TForm.Create(AOwner: TComponent);
+begin
+  inherited CreateNew(Application);
+  if Application.MainForm = Nil then
+  begin
+    Application.MainForm := Self;
+    TMessageManager.DefaultManager.SendMessage(Self, TMainCaptionChangedMessage.Create(Self));
+  end;
+end;
+{$ENDIF}
+{$IF Defined(FMX) or Defined(VCL)}
+initialization
+  if _init then
+  begin
+    _init := false;
+    {$IF Defined(FMX)}
+    RegisterClass(WPD.Vis.TForm);
+    WPD.RTTI.Procedures.
+    {$ELSEIF Defined(VCL)}
+    RegisterClass(VCL.Forms.TForm);
+    {$ENDIF}
+  end;
+{$ENDIF}
+end.

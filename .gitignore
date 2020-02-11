@@ -1,0 +1,10 @@
+## Ignore Embarcadero temporary files, build results, and
+Source/Trash/*
+
+# User-specific files
+*.dproj.local
+*.stat
+
+# Ignore files history
+*/__history
+*/__recovery

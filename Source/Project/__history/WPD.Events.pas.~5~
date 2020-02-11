@@ -1,0 +1,153 @@
+unit WPD.Events;
+
+interface
+
+uses
+  System.SysUtils,
+  FMX.Dialogs,
+  Generics.Collections,
+  Rtti,
+  TypInfo,
+  System.Classes,
+  WPD.RTTI.Objects,
+  WPD.Zend.Types;
+
+type
+  TEventBeforeNotify = reference to procedure(_Function: pzval;
+    o: TRttiProperty; const Args: TArray<TValue>);
+
+  PEventExecute = ^TEventExecute;
+
+  TEvent = class(TPersistent)
+  private
+    IsDestroy: Boolean;
+    FOnBefore: TEventBeforeNotify;
+    FlCtx: TRttiContext;
+    FlList: TDictionary<String, Pointer>;
+  public
+
+    property List: TDictionary<String, Pointer> read FlList;
+    property OnBefore: TEventBeforeNotify read FOnBefore write FOnBefore;
+
+    constructor Create();
+    function Add(P: pzval; aSender: tObject; aMethod: string;
+      SetNil: Boolean = false): Boolean;
+    destructor Destroy; override;
+  end;
+
+  TEventExecute = class(TInterfacedObject, IMethodHandler)
+  private
+    PhpFuncInfo: pzval;
+    aSender: tObject;
+    aMethod: string;
+    P: TEvent;
+    MethodPointerOld: TMethod;
+    MethodPointer: TMethod;
+  public
+    function Execute(__PropType: TRttiProperty;
+      const Args: TArray<TValue>): Variant;
+    destructor Destroy; override;
+  end;
+
+implementation
+
+function TEventExecute.Execute(__PropType: TRttiProperty;
+  const Args: TArray<TValue>): Variant;
+var
+  pR: Pointer;
+  NameCase: string;
+begin
+  NameCase := NativeInt(Args[0].AsObject).ToString + '_' +
+    NativeInt(__PropType).ToString;
+  if P.List.TryGetValue(NameCase, pR) then
+  begin
+    P.OnBefore(TEventExecute(pR).PhpFuncInfo, __PropType, Args);
+  end;
+end;
+
+destructor TEventExecute.Destroy;
+begin
+  aSender := nil;
+  aMethod := '';
+  if not P.IsDestroy then
+    P.Destroy;
+end;
+
+constructor TEvent.Create();
+begin
+  IsDestroy := false;
+  FlList := TDictionary<String, Pointer>.Create();
+end;
+
+destructor TEvent.Destroy;
+var
+  m: Pointer;
+  e: TEventExecute;
+begin
+  IsDestroy := true;
+
+  for m in FlList.Values do
+  begin
+    e := TEventExecute(m);
+    setMethodProp(e.aSender, e.aMethod, e.MethodPointerOld);
+    ReleaseMethodPointer(e.MethodPointer);
+  end;
+
+  FlList.Clear;
+  FlList.Destroy;
+end;
+
+function TEvent.Add(P: pzval; aSender: tObject; aMethod: string;
+  SetNil: Boolean = false): Boolean;
+var
+  TProperty: TRttiProperty;
+  m: TMethod;
+  pR: Pointer;
+  R: TEventExecute;
+  Met: TArray<TRttiProperty>;
+  NameCase: string;
+begin
+  Result := false;
+
+  TProperty := FlCtx.GetType(aSender.ClassInfo).GetProperty(aMethod);
+
+  if (TProperty <> nil) then
+  begin
+    NameCase := NativeInt(aSender).ToString + '_' +
+      NativeInt(TProperty).ToString;
+
+    if not FlList.TryGetValue(NameCase, pR) then
+    begin
+      R := TEventExecute.Create;
+      R.aSender := aSender;
+
+      R.aMethod := aMethod;
+      R.P := self; // Set Pointer
+      R.PhpFuncInfo := NewPzval(P);
+
+      m := createMethodPointer(R, TProperty);
+      R.MethodPointer := m;
+      R.MethodPointerOld := GetMethodProp(aSender, aMethod);
+
+      FlList.Add(NameCase, R);
+    end
+    else
+    begin
+      R := TEventExecute(pR);
+
+      if SetNil then
+      begin
+        m.Code := nil;
+        m.Data := nil;
+      end
+      else
+      begin
+        m := R.MethodPointer;
+      end;
+    end;
+
+    setMethodProp(aSender, aMethod, m);
+  end;
+end;
+
+end.

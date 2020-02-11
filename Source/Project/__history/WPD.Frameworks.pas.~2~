@@ -1,0 +1,30 @@
+unit WPD.Frameworks;
+
+interface
+
+uses
+  System.Types,
+  System.Classes,
+  FMX.Forms, System.Classes, System.Messaging,
+  FMX.Consts, FMX.Types, FMX.dialogs,
+  System.UITypes;
+type TForm = class (FMX.Forms.TCustomForm)
+  constructor Create(AOwner: TComponent); override;
+end;
+
+implementation
+
+constructor TForm.Create(AOwner: TComponent);
+begin
+  inherited CreateNew(Application);
+  if Application.MainForm = Nil then
+  begin
+    Application.MainForm := Self;
+    TMessageManager.DefaultManager.SendMessage(Self, TMainCaptionChangedMessage.Create(Self));
+  end;
+end;
+
+initialization
+  RegisterClass(WPD.Frameworks.TForm);
+
+end.

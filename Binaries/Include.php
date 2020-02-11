@@ -1,17 +1,12 @@
 <?php
 
-Use \DClass\Vcl\ {
+Use \DClass\FMX\ {
+	Types\TFMXObject,
 	Forms\TApplication,
 	Forms\TForm,
 	StdCtrls\TButton,
-	StdCtrls\TMemo
+	Memo\TMemo
 };
-Use \DClass\System\TObject;
-Use \DClass\SynEdit\TSynEdit;
-Use \DClass\SynHighlighterPHP\TSynPHPSyn;
-
-USE \DClass\sSkinManager\TsSkinManager;
-USE \DClass\sSkinProvider\TsSkinProvider;
 
 function pre(...$a) {
 	if(count($a) == 1) $a = $a[0];
@@ -20,59 +15,62 @@ function pre(...$a) {
 
 $Application = new TApplication([NULL]);
 $Application->Initialize();
-$Application->MainFormOnTaskBar = true;
-
-$Form = new TForm(TObject::DOwnerSelf());
-$Application->CreateForm(TForm::AsInstance()->MetaClassType, $Form);
-
-$Form->Caption = 'Ìîÿ ôîðìà';
-
-$SynEdit = new TSynEdit($Form);
+$Form = new TForm([NULL]);
+$Form->Position = 'poScreenCenter';
+$Form->Visible = true;
+$Form->Width = 550;
+$Form->Height = 500;
+$Form->Caption = "ðŸ†ðŸ†ðŸ† .-=WPD=-. ðŸ†ðŸ†ðŸ†";
+$Form->Name = "Frm";
+$ab = new TButton($Form);
+$ab->Name = "cli";
+$ab->Parent = $Form;
+$ab->Width = 200;
+$ab->Height = 25;
+$ab->Align = 'alTop';
+$ab->RotationAngle = 35;
+$SynEdit = new TMemo($Form);
 $SynEdit->Name = 'SynEdit1';
-
-$SynEdit->onClick = function($self) {
-	pre('Ñîîáùåíèå íà ñòðîêå: ' . __LINE__ , $self->selText);
+$Form2 = new TForm([NULL]);
+$Form2->Position = 'poScreenCenter';
+$Form2->Width = 550;
+$Form2->Height = 500;
+$Form2->Caption = ".-=Engine Test=-.";
+$Form2->Name = "Frm2";
+$b2 = new TButton($Form2);
+$b2->Name = "bt2";
+$b2->Parent = $Form2;
+$b2->Text = "Functions";
+$b2->Width = 250;
+$b2->Height = 25;
+$b2->OnClick = function($ths) 
+{
+	pre( get_extension_funcs('wpd') );
+	file_put_contents('classes.list', print_r(get_declared_classes(),true) );
 };
-
-
-$SynEdit->Options = '[eoAltSetsColumnMode,eoAutoIndent,
-    eoAutoSizeMaxScrollWidth,eoDisableScrollArrows,eoDragDropEditing,
-    eoEnhanceHomeKey,eoEnhanceEndKey,eoGroupUndo,eoHalfPageScroll,
-    eoHideShowScrollbars,eoRightMouseMovesCursor,eoScrollPastEof,
-    eoShowScrollHint,eoSmartTabDelete,eoTabIndent,
-    eoTabsToSpaces,eoTrimTrailingSpaces]';
-
-
+$b3 = new TButton($Form2);
+$b3->Name = "bt3";
+$b3->Parent = $Form2;
+$b3->Text = "Utf-8";
+$b3->Position->x = 255;
+$b3->Width = 250;
+$b3->Height = 25;
+$b3->OnClick = function($ths) use($Form)
+{
+	pre( "However, unicode is still cannot be transefered from engine, :(\r\nProof:" /*+*/. $Form->Caption );
+	pre('Ð«Ñ‹ Ñ‹Ñ‹Ñ‹ Ñ‹Ð«');
+	pre('ðŸ†ðŸ†');
+};
+$ab->onClick = function($ths) use($Form2,$SynEdit)
+{
+	pre('Line Number:	' . __LINE__ , $SynEdit->selText);
+		$Form2->Show();
+};
 $SynEdit->Parent = $Form;
 $SynEdit->Align = 'alClient';
-$SynEdit->ActiveLineColor = 986895;
-$SynEdit->BorderStyle = 'bsNone';
-$SynEdit->Color = 1973790;
-$SynEdit->Gutter->Color = 1973790;
-$SynEdit->Gutter->BorderColor = 4605510;
-$SynEdit->Gutter->Font->Color = 6579300;
-$SynEdit->Gutter->Font->Size = 10;
-$SynEdit->Gutter->Font->Name = 'Consolas';
-$SynEdit->Gutter->LeftOffset = 10;
-$SynEdit->Gutter->RightOffset = 4;
-$SynEdit->Gutter->ShowLineNumbers = True;
-$SynEdit->Font->Color = 14342874;
-$SynEdit->Font->Size = 10;
-$SynEdit->Font->Name = 'Consolas';
-
-$SynEdit->Highlighter = new TSynPHPSyn($Form);
-$SynEdit->Highlighter->CommentAttri->Foreground = 4892247;
-$SynEdit->Highlighter->KeyAttri->Foreground = 15181656;
-$SynEdit->Highlighter->NumberAttri->Foreground = 11585861;
-$SynEdit->Highlighter->StringAttri->Foreground = 0x1AC9EC;
-$SynEdit->Highlighter->VariableAttri->Foreground = 0x36EC1A;
-
-$SynEdit->RightEdgeColor = 4605510;
-$SynEdit->SelectedColor->Background = 0x2211CC;
-$SynEdit->SelectedColor->Foreground = 16777215;
-$SynEdit->TabWidth = 4;
-$SynEdit->WantTabs = True;
-
+$SynEdit->TextSettings->FontColor = 14342874;
+$SynEdit->TextSettings->Font->Size = 10;
+$SynEdit->TextSettings->Font->Family = 'Consolas';
 
 $SynEdit->text = file_get_contents(__FILE__);
 

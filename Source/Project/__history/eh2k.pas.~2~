@@ -1,0 +1,290 @@
+unit eh2k;
+
+interface
+
+uses
+  Generics.Collections,
+  Rtti,
+  TypInfo,
+  System.SysUtils
+  , FMX.Dialogs
+ // , VCL.Forms
+  , System.Classes
+  , WinApi.Windows
+ // ,dwsHashtables,
+   //System.Classes,
+    //zendAPI, phpApi, ZENDTypes, php4delphi, core
+    ;
+
+type
+  TBaseEvent = class;           //класс псевдо-события(ИЙЫЫ)
+  //PPVarRec = ^PVarRec;          //указатель на указатель на  TVarRec
+                              //TVarRec - запись переменной, используется Delphi в событиях
+                              //Фролов видимо про неё не подумал...
+  TEventBeforeNotify = reference to procedure(Base: TBaseEvent;
+    var Params: array of PVarRec); //Наше псевдо-событие(заданное пользователем)
+
+  TBaseEvent = class
+  private
+    //Список обработчиков
+    {Количество}
+     ListEventsCallCount: Cardinal;
+    {Сам список}
+    //А вот это списочек для дс, ЫЫЫ
+    ListEventsCall: array [0 .. 255] of pointer;
+
+   {Настоящие обработчики событий, вызывающий псевдо-обработчик(и)}
+    Procedure EventCall();
+    Procedure EventCall1(A1: PVarRec);
+    Procedure EventCall2(A1, A2: PVarRec);
+    Procedure EventCall3(A1, A2, A3: PVarRec);
+
+    {обработчик вызова события}
+    procedure Handler(PointArgs: Array of PVarRec);
+  public
+    {Оригинальный объект вызова события}
+    Sender: TObject;
+    {Информация об параметрах события}
+    InfoArgs: TArray<TRttiParameter>;
+    {Длина (количество) параметров события}
+    LengthArgs: Byte;
+    {RTTI-события(одного,да)}
+    PropType: TRttiProperty;
+    {Имя события}
+    EventName: string;
+    {Конструктор класса обработчика}
+    constructor Create(aSender: TObject; _PropType: TRttiProperty);
+    {Деструктор класса}
+    destructor Destroy;
+  end;
+
+  TEventHook = class
+  private
+    RttiContext: TRttiContext;
+    FlList: TDictionary<String, TBaseEvent>;
+    FOnBefore: TEventBeforeNotify;
+  public
+  //  procedure fphpEvent(Base: TBaseEvent;var Params: TArray<PVarRec>);
+    property OnBefore: TEventBeforeNotify read FOnBefore write FOnBefore;// Default fPhpEvent;
+
+    function IsSet(aSender: TObject; PropName: string; var Base: TBaseEvent)
+      : Boolean; overload;
+    function IsSet(aSender: TObject; Prop: TRttiProperty; var Base: TBaseEvent)
+      : Boolean; overload;
+
+    function IsSet(aSender: TObject; PropName: string): Boolean; overload;
+    function IsSet(aSender: TObject; Prop: TRttiProperty): Boolean; overload;
+
+    function ESet(aSender: TObject;
+    const PropName: string;
+    const Events: array of pointer)
+      : Boolean; overload;
+    function ESet(aSender: TObject;
+    Prop: TRttiProperty;
+    const Events: array of pointer): Boolean; overload;
+    function EAdd(aSender: TObject;
+    const PropName: string;
+    const Events: array of pointer): Boolean; overload;
+
+    function ERem(aSender: TObject; const PropName: string): Boolean;
+    constructor Create();
+    destructor Destroy;
+  end;
+
+var
+  EventHookObject: TEventHook;
+implementation
+
+constructor TEventHook.Create();
+begin
+  FlList := TDictionary<String, TBaseEvent>.Create();
+end;
+
+constructor TBaseEvent.Create(aSender: TObject; _PropType: TRttiProperty);
+begin
+  Sender := aSender;
+  PropType := _PropType;
+  EventName := PropType.Name;
+  InfoArgs := TRttiInvokableType(PropType.PropertyType).GetParameters;
+  LengthArgs := _PropType.PropertyType.Handle.TypeData.ParamCount;
+  ListEventsCallCount := 0;
+end;
+
+destructor TBaseEvent.Destroy;
+begin
+  SetLength(InfoArgs, 0);
+  ListEventsCallCount := 0;
+end;
+
+function TEventHook.IsSet(aSender: TObject; Prop: TRttiProperty;
+  var Base: TBaseEvent): Boolean;
+begin
+  Result := Prop <> nil;
+  if Result then
+    Result := FlList.TryGetValue(IntToStr(NativeUInt(aSender)) + '_' +
+      Prop.Name, Base);
+end;
+
+function TEventHook.IsSet(aSender: TObject; PropName: string;
+  var Base: TBaseEvent): Boolean;
+begin
+  Result := FlList.TryGetValue(IntToStr(NativeUInt(aSender)) + '_' +
+    PropName, Base);
+end;
+
+function TEventHook.IsSet(aSender: TObject; Prop: TRttiProperty): Boolean;
+var
+  Base: TBaseEvent;
+begin
+  Result := IsSet(aSender, string(Prop), TBaseEvent(Base));
+end;
+
+function TEventHook.IsSet(aSender: TObject; PropName: string): Boolean;
+var
+  Base: TBaseEvent;
+begin
+  Result := IsSet(aSender, PropName, Base);
+end;
+
+function TEventHook.ESet(aSender: TObject; Prop: TRttiProperty;
+const Events: array of pointer): Boolean;
+var
+  m: TMethod;
+  Base: TBaseEvent;
+  NameCase, PropName: string;
+  I: byte;
+begin
+ Result := false;
+  if (@aSender <> nil) and (Prop <> nil) then
+  begin
+    PropName := Prop.Name;
+    NameCase := IntToStr(NativeUInt(aSender)) + '_' + PropName;
+    if not FlList.TryGetValue(NameCase, Base) then
+    begin
+      Result := true;
+
+      case Prop.PropertyType.Handle.TypeData.ParamCount of
+        0:
+          m.Code := @TBaseEvent.EventCall;
+      else
+        m.Code := @TBaseEvent.Handler;
+      end;
+
+        Base := TBaseEvent.Create(aSender, Prop);
+        for I := 0 to Length(Events) do
+        begin
+          if Base.ListEventsCallCount = 256 then exit;
+
+          Base.ListEventsCall[Base.ListEventsCallCount] := Events[I];
+          inc(Base.ListEventsCallCount);
+        end;
+        TObject(m.Data) := Base;
+        setMethodProp(aSender, PropName, m);
+        FlList.Add(NameCase, Base);
+    end;
+  end;
+end;
+
+function TEventHook.ESet(aSender: TObject;
+const PropName: string;
+const Events:array of pointer): Boolean;
+begin
+  if @aSender <> nil then
+    Result := ESet(aSender, RttiContext.GetType(aSender.ClassInfo)
+      .GetProperty(PropName),Events)
+  else
+    Result := false;
+end;
+
+function TEventHook.EAdd(aSender: TObject;
+const PropName: string;
+const Events: array of pointer): Boolean;
+var
+  Base: TBaseEvent;
+  I: byte;
+begin
+  Result := IsSet(aSender, PropName, Base);
+  if Result then
+  begin
+    for I := 0 to Length(Events) do
+        begin
+          if Base.ListEventsCallCount = 256 then exit;
+
+          Base.ListEventsCall[Base.ListEventsCallCount] := Events[I];
+          inc(Base.ListEventsCallCount);
+        end;
+  end else
+    Result := ESet(aSender, PropName, Events);
+end;
+
+function TEventHook.ERem(aSender: TObject; const PropName: string): Boolean;
+var
+  Base: TBaseEvent;
+begin
+  Result := IsSet(aSender, PropName, Base);
+
+  if Result then
+  begin
+    Base.Destroy;
+    FlList.Remove(IntToStr(NativeUInt(aSender)) + '_' + PropName);
+  end;
+end;
+
+destructor TEventHook.Destroy;
+var
+  Item: TPair<String, TBaseEvent>;
+begin
+  for Item in FlList do
+    Item.Value.Destroy;
+
+  FlList.Free;
+end;
+Procedure TBaseEvent.EventCall;
+begin
+  Handler([]);
+end;
+Procedure TBaseEvent.EventCall1;
+begin
+  Handler([@A1]);
+end;
+Procedure TBaseEvent.EventCall2;
+begin
+  Handler([@A1, @A2]);
+end;
+Procedure TBaseEvent.EventCall3;
+begin
+  Handler([@A1, @A2, @A3]);
+end;
+Procedure TBaseEvent.Handler(PointArgs: array of PVarRec);
+var
+  i: Integer;
+  Params: TArray<TValue>;
+  P: Pointer;
+begin
+  SetLength(Params, LengthArgs);
+  ShowMessage('--');
+  for i := Low(InfoArgs) to High(InfoArgs) do
+  begin
+    P := PointArgs[i];
+    if InfoArgs[i].Flags * [pfVar, pfOut] <> [] then
+      P := PPointer(P)^;
+
+    TValue.Make(P, InfoArgs[i].ParamType.Handle, Params[i]);
+  end;
+
+  if @EventHookObject.OnBefore <> nil then
+    EventHookObject.OnBefore(self, PointArgs);
+
+  for i := Low(ListEventsCall) to ListEventsCallCount - 1 do
+    TMethod(ListEventsCall[i]).(self, Params);
+end;
+
+initialization
+
+EventHookObject := TEventHook.Create;
+
+finalization
+
+EventHookObject.Destroy;
+
+end.
