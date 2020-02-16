@@ -1,11 +1,10 @@
 # no-name-engine
-No-Name Engine for integrating php with Delphi<br>
+Engine for interacting with php from Pascal<br>
 A legacy version of HyperEngine
 
 # Requirements
 Delphi 10.1 and upper
 <br>Synedit package
-<br>AlphaControls suit
 
 # Compiling
 1. Download and install required packages
