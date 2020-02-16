@@ -6,5 +6,6 @@ Source/Trash/*
 *.stat
 
 # Ignore files history
-*/__history
+*/__history/
 */__recovery
+__history/

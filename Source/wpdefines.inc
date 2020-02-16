@@ -11,3 +11,4 @@
 		{$DEFINE VCL}
 	{$endif}
 {$endif}
+{$DEFINE PHP_EDITED}

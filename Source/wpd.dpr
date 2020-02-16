@@ -42,26 +42,19 @@ procedure TestMessage(execute_data: Pzend_execute_data;
   return_value: Pzval); cdecl;
 var
   Text: Pzval;
+
 begin
   if zend_parse_method_parameters(1, nil, 'z', @Text) = 0 then
   begin
     ShowMessage(ZvalGetString(Text));
   end;
 end;
-
 procedure t_(execute_data: Pzend_execute_data;
   return_value: Pzval); cdecl;
-var
-  p: pzval;
+  var s: UTF8String;
 begin
-
-  if zend_parse_method_parameters(1, nil, 'z', @p) = 0 then
-  begin
-  ShowMessage('ival-- ' + IntToStr(p^.value.lval));
-  p^.value.lval :=  2;
-  ShowMessage('ival-- ' + IntToStr(p^.value.lval));
-    //ZvalSetStringRaw(Text, '🐆🐆');
-  end;
+    s := '🐆🐆🐆 .-=WPD=-. 🐆🐆🐆';
+    ZvalSetStr(return_value, s);
 end;
 
 type
@@ -135,7 +128,7 @@ begin
     PPointer(_TestCreate)^ := RttiEventBase;
 
     PEngineLik.addFunc('Message', @TestMessage);
-    PEngineLik.addFunc('textf', @t_, 1);
+    PEngineLik.addFunc('test', @t_, 1);
 
     PEngineLik.addFunc('GUILoadComponentFromTextFile',
       @GUILoadComponentFromTextFile);

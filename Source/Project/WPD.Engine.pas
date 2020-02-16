@@ -19,7 +19,7 @@ type
     PreDelimiter: string;
     SlitDelimiter: Boolean;
     TSRMLS_D: Pointer;
-    delphi_sapi_module: sapi_module_struct;
+    wpd_sapi_module: sapi_module_struct;
     PHPINIPath: AnsiString;
     ZendAPIVersion: Integer;
     FLibraryModule: _zend_module_entry;
@@ -40,7 +40,7 @@ type
 
 implementation
 
-constructor TWPDEngine.Create;
+constructor TWPDEngine.Create(phpLibraryPath: String; IsDebugMode: Boolean = false; ZendApiVer: Integer = 20160303);
 begin
   try
     PHPINIPath := 'php.ini';
@@ -133,7 +133,7 @@ function LogMessageError(_message: PAnsiChar): Integer; cdecl;
 begin
   Result := 0;
 
-  MessageBox(0, PWideChar(WideString(_message)), '[WPD Engine]', 0);
+  MessageBox(0, PChar(String(_message)), '[WPD Engine]', 0);
 end;
 
 function TWPDEngine.ZEND_MODULE_BUILD_ID: AnsiString;
@@ -146,11 +146,7 @@ procedure TWPDEngine.SetZendError(p: Pointer);
 begin
   ppointer(GetProcAddress(phpHandle, 'zend_error_cb'))^ := p;
 end;
-procedure __asmHookFunc(initial: pointer; endpoint: pointer);
-begin
-  Move( initial, endpoint, 1 );
-  // Move(tmp, tmp2, SizeOf(Pointer));
-end;
+
 procedure TWPDEngine.StartupEngine;
 begin
 
@@ -172,23 +168,23 @@ begin
       FLibraryModule.Handle := nil;
       FLibraryModule.module_number := 0;
 
-      delphi_sapi_module.Name := 'wpd';
-      delphi_sapi_module.pretty_name := 'WPD Engine';
+      wpd_sapi_module.Name := 'wpd';
+      wpd_sapi_module.pretty_name := 'WPD Engine';
 
       if FileExists(PHPINIPath) then
-        delphi_sapi_module.php_ini_path_override := PAnsiChar(PHPINIPath)
+        wpd_sapi_module.php_ini_path_override := PAnsiChar(PHPINIPath)
       else
-        delphi_sapi_module.php_ini_path_override := nil;
+        wpd_sapi_module.php_ini_path_override := nil;
 
-      delphi_sapi_module.log_message := @LogMessageError;
-      delphi_sapi_module.sapi_error := @zend_error;
+      wpd_sapi_module.log_message := @LogMessageError;
+      wpd_sapi_module.sapi_error := @zend_error;
 
-      tsrm_startup(1, 1, 0, nil);
+      tsrm_startup(128, 1, 0, nil);
 
-      sapi_startup(@delphi_sapi_module);
+      sapi_startup(@wpd_sapi_module);
 
       FLibraryModule.functions := @ZendFunction[0];
-      php_module_startup(@delphi_sapi_module, @FLibraryModule, 1);
+      php_module_startup(@wpd_sapi_module, @FLibraryModule, 1);
 
       TSRMLS_D := tsrm_get_ls_cache;
 
@@ -201,7 +197,7 @@ begin
       PHPInitSetValue('max_input_time', '0', ZEND_INI_SYSTEM,
         ZEND_INI_STAGE_ACTIVATE);
 
-      __asmHookFunc(GetProcAddress(phpHandle, 'zend_error_cb'), @zend_error_cb2);
+     Self.SetZendError(@zend_error_cb2);
       ISEngineLoad := True;
     end;
 
@@ -213,7 +209,7 @@ begin
 end;
 
 function TWPDEngine.addFunc(Name: PAnsiChar; CallBackFunc: Pointer; num: integer = 0): bool;
-var ar: TArray< zend_internal_arg_info >;
+var ar: {$ifdef fpc} specialize {$endif} TArray< zend_internal_arg_info >;
 begin
   Result := False;
   inc(RegNumFunc);

@@ -750,9 +750,9 @@ begin
   end;
   // P is left pointing to the return type name if there is one.
            //   Self.MethodHandler.
-  ShowMessage('w');
+  //ShowMessage('w');
   ReturnValue := MethodHandler.Execute(Self._PropertyType, MethodValues);
-  ShowMessage('a');
+ // ShowMessage('a');
   P := @TypeData^.ParamList;
   for I := 0 to TypeData^.ParamCount - 1 do
   begin
@@ -786,7 +786,7 @@ begin
       Regs[paRDX] := PCardinal(PByte(@TVarData(ReturnValue).VLongWord) + 4)^;
     end;
   end;
-  ShowMessage('s');
+  //ShowMessage('s');
   movret(Regs);
 end;
 

@@ -25,13 +25,13 @@ uses
   VCL.Dialogs
   {$ELSE}
   {$ENDIF}
-  {$IF Defined(VCL) or Defined(FMX)}
+  {$IF not Defined(FPC) and (Defined(VCL) or Defined(FMX))}
   , System.UITypes
   {$ENDIF}
   ;
 procedure Out(What: String; E: Boolean = False);
 
-{$IF Defined(FMX)}
+{$IF not Defined(FPC) and Defined(FMX)}
 type TForm = class (FMX.Forms.TCustomForm)
   constructor Create(AOwner: TComponent); override;
 end;
@@ -39,7 +39,7 @@ end;
 
 implementation
 procedure Out(What: String; E: Boolean = False);
-{$IF Defined(FMX)}
+{$IF not Defined(FPC) and Defined(FMX)}
 Begin
   if E then
        MessageDlg( What, TMsgDlgType.mtWarning, [TMsgDlgBtn.mbOK], 0 )
@@ -66,7 +66,7 @@ Begin
 End;
 {$ENDIF}
 
-{$IF Defined(FMX)}
+{$IF not Defined(FPC) and Defined(FMX)}
 constructor TForm.Create(AOwner: TComponent);
 begin
   inherited CreateNew(Application);

@@ -24,7 +24,7 @@ uses
   { you can add units after this }
 
 
-  Unit1;
+  Unit1, unit2;
 
 {$R *.res}
 procedure registerArr(Classes: array of TPersistentClass);
@@ -108,10 +108,6 @@ begin
     PEngineLik.addFunc('GUIStringToComponent', @GUIStringToComponent);
 
     PEngineLik.StartupEngine;
-
-    tmp := GetProcAddress(phpHandle, 'zend_error_cb');
-    tmp2 := @zend_error_cb2;
-    Move(tmp, tmp2, SizeOf(Pointer));
     PEngineLik.RunCode
       ('spl_autoload_register("ClassdSQLLoadMyRTTI::dSQLLoadMyRTTI");  include_once("Include.php"); ');
     PEngineLik.Destroy;

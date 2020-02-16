@@ -3,27 +3,36 @@ unit WPD.RTTI.Procedures;
 interface
 
 uses Classes,
-  {$IF Defined(FMX)}
-  FMX.Forms,
-  {$ELSEIF Defined(VCL)}
-  VCL.Forms,
-  {$ENDIF}
+  {$IF Defined(LCL)}
+       Forms,
+  {$elseif not defined(FPC)}
+    {$if Defined(FMX)}
+         FMX.Forms,
+    {$elseif Defined(VCL)}
+         VCL.Forms,
+    {$endif}
+  {$endif}
   SysUtils,
   Windows, WideStrUtils, variants, rtti,
-  System.TypInfo, Generics.Collections,
+  {$ifdef fpc}
+   TypInfo,
+  {$else}
+   System.TypInfo,
+  {$endif}
+  Generics.Collections,
   WPD.Classes,
   WPD.Engine, WPD.Vis, WPD.PHP, WPD.Zend.Types, WPD.Events, System.RTLConsts;
 
 var
   EDTRc: TRttiContext;
   PhpEvent: TEvent;
-  ListObjSelf: TDictionary<PAnsiChar, NativeInt>;
+  ListObjSelf: TDictionary<PUTF8Char, NativeInt>;
   ListObjEventClass: TDictionary<NativeInt, Pzval>;
 
-function FindControlVCL(obj: PAnsiChar): longint; cdecl;
+function FindControlVCL(obj: PUTF8Char): longint; cdecl;
 
 function TestVariant(var ZResult: Pzval; ZOwner, ZOwnerSelf: Integer;
-  AName: PAnsiChar; arr: Pzval): Integer; cdecl;
+  AName: PUTF8Char; arr: Pzval): Integer; cdecl;
 procedure TestSetRet(return_value: Pzval; Result: TValue; ClassName: String);
 procedure GUIStringToComponent(execute_data: Pzend_execute_data;
   return_value: Pzval); cdecl;
@@ -51,13 +60,13 @@ var
     i := 0;
 
     // scan til whitespace
-    while not(P[i] in [',', ' ', #0, ']']) do
+    while not CharInSet(P[i], [',', ' ', #0, ']']) do
       Inc(i);
 
     SetString(Result, P, i);
 
     // skip whitespace
-    while (P[i] in [',', ' ', ']']) do
+    while CharInSet(P[i], [',', ' ', ']']) do
       Inc(i);
 
     Inc(P, i);
@@ -70,7 +79,7 @@ begin
   P := PChar(Value);
 
   // skip leading bracket and whitespace
-  while (P^ in ['[', ' ']) do
+  while CharInSet(P^, ['[', ' ']) do
     Inc(P);
 
   PEnumInfo := GetTypeData(TypeInfo)^.CompType;
@@ -145,7 +154,7 @@ begin
   begin
     case P.TypeKind of
       tkChar:
-        Result := ZvalGetStringA(Value)[1];
+        Result := TValue.From<AnsiChar>( ZvalGetStringA(Value)[1] );
       tkClass:
         begin
           obj := TObject(ZvalGetInt(Value));
@@ -192,6 +201,8 @@ begin
           ResultType := nil;
           if (P.Name = 'PWideChar') or (P.Name = 'PChar') then
             ResultType := StringToOleStr(ZvalGetString(Value))
+          else if (P.Name = 'PUTF8Char') or (P.Name = '_PUTF8Char') then
+            ResultType := PUTF8Char(ZvalGetStringU(Value))
           else if (P.Name = 'PAnsiChar') or (P.Name = '_PAnsiChar') then
             ResultType := PAnsiChar(ZvalGetStringA(Value))
           else if P.Name = 'PAnsiString' then
@@ -213,11 +224,11 @@ begin
       tkWChar:
         Result := ZvalGetString(Value)[1];
       tkLString:
-        Result := ZvalGetStringA(Value);
+        Result := ZvalGetString(Value);
       tkWString:
         Result := ZvalGetString(Value);
       tkInt64:
-        Result := StrToInt64(ZvalGetStringA(Value));
+        Result := StrToInt64(ZvalGetString(Value));
       tkUString:
         Result := ZvalGetString(Value);
       tkEnumeration:
@@ -227,7 +238,7 @@ begin
         end;
       tkSet:
         begin
-          i := StringToSet3(P.Handle, String(ZvalGetPChar(Value)));
+          i := StringToSet3(P.Handle, ZvalGetString(Value));
           TValue.Make(@i, P.Handle, Result);
         end;
       tkUnknown:
@@ -240,7 +251,7 @@ begin
             IS_BOOL:
               Result := ZvalGetBool(Value);
             IS_STRING:
-              Result := ZvalGetStringA(Value);
+              Result := ZvalGetString(Value);
           end;
         end
     else
@@ -287,15 +298,12 @@ begin
     ClassName := StringReplace(ClassName, '.', '\',
       [rfReplaceAll, rfIgnoreCase]);
 
-    CreateCll(return_value, PAnsiChar(AnsiString('DClass\' + ClassName)), Self);
+    CreateCll(return_value, PUTF8Char(UTF8String('DClass\' + ClassName)), Self);
   end;
 end;
 
 procedure TestSetRet(return_value: Pzval; Result: TValue; ClassName: String);
 begin
-// System.String
-if ClassName = 'System.string' then
-  WPD.Vis.Out(Result.ToString);
   if Result.IsEmpty then
   begin
     ZvalVAL(return_value);
@@ -333,7 +341,7 @@ if ClassName = 'System.string' then
 
 end;
 
-function FindControlVCL(obj: PAnsiChar): longint; cdecl;
+function FindControlVCL(obj: PUTF8Char): longint; cdecl;
 var
   ClassName: string;
   RealClassName: string;
@@ -342,7 +350,7 @@ begin
   Self := 0;
   if not ListObjSelf.TryGetValue(obj, Self) then
   begin
-    ClassName := StringReplace(obj, '\', '.', [rfReplaceAll, rfIgnoreCase]);
+    ClassName := StringReplace(UTF8String(obj), '\', '.', [rfReplaceAll, rfIgnoreCase]);
 
     if Copy(ClassName, 0, 1) = '.' then
       ClassName := Copy(ClassName, 2);
@@ -361,7 +369,7 @@ begin
 end;
 
 function TestVariant(var ZResult: Pzval; ZOwner, ZOwnerSelf: Integer;
-  AName: PAnsiChar; arr: Pzval): Integer; cdecl;
+  AName: PUtf8Char; arr: Pzval): Integer; cdecl;
 var
   TRttiIT: TRttiType;
   Instance: TRttiType;
@@ -393,7 +401,7 @@ begin
         Num := 1;
     end;
 
-    TMethod := TRttiIT.GetMethod(AName);
+    TMethod := TRttiIT.GetMethod(UTF8String(AName));
 
     if (TMethod = nil) and (ZOwnerSelf <> -1) then
     begin
@@ -402,7 +410,7 @@ begin
       if Instance <> nil then
       begin
         TPropertyIdx := EDTRc.GetType(Instance.ClassInfo)
-          .GetIndexedProperty(AName);
+          .GetIndexedProperty(UTF8String(AName));
 
         if TPropertyIdx <> nil then
         begin
@@ -433,7 +441,7 @@ begin
         end
         else
         begin
-          TProperty := EDTRc.GetType(Instance.ClassInfo).GetProperty(AName);
+          TProperty := EDTRc.GetType(Instance.ClassInfo).GetProperty(UTF8String(AName));
 
           if TProperty <> nil then
           begin
@@ -462,7 +470,7 @@ begin
           end
           else
           begin
-            TField := EDTRc.GetType(Instance.ClassInfo).GetField(AName);
+            TField := EDTRc.GetType(Instance.ClassInfo).GetField(UTF8String(AName));
             if TField <> nil then
             begin
               if (arr <> nil) then
@@ -487,7 +495,7 @@ begin
         mkClassFunction, mkClassConstructor, mkClassDestructor] then
         TestSetRet(@ZResult, TMethod.Invoke(TRttiIT.AsInstance.MetaclassType,
           Args), ZOwnerSelf.ToString)
-      {$IF Defined(VCL) or Defined(FMX)}
+      {$IF Defined(LCL) or Defined(VCL) or Defined(FMX)}
       else if TRttiIT.AsInstance.MetaclassType.InheritsFrom(TApplication) then
         TestSetRet(@ZResult, TMethod.Invoke(Application, Args),
           ZOwnerSelf.ToString)
@@ -562,10 +570,13 @@ begin
 end;
 
 function __asmmov(ionis:IntPtr; pn: Pointer): IntPtr;
-asm
+ begin
+ Result := (ionis shl Sizeof(Pointer)) + IntPtr(pn);
+(*asm
 {$IFDEF CPUX64}
   mov rax, ionis
   shl rax, $08 //in 64-x systems we need to double all of the byte adresses
+              //Reason: size of the pointer is 2x extended.
   add rax, pn
   mov Result, RAX
 {$ELSE}
@@ -574,6 +585,7 @@ asm
   add eax, pn
   mov Result, EAX
 {$ENDIF}
+*)
 end;
 
 procedure DoBefore2(_Function: Pzval; o: TRttiProperty;
@@ -607,7 +619,7 @@ begin
   if zend_parse_method_parameters(2, nil, 'zz', @Instance, @_File) = 0 then
   begin
     MemStream := TMemoryStream.Create;
-    FileStream := TFileStream.Create(ZvalGetStringA(_File), fmOpenRead);
+    FileStream := TFileStream.Create(ZvalGetString(_File), fmOpenRead);
     try
       ObjectTextToBinary(FileStream, MemStream);
       MemStream.Position := 0;
@@ -681,7 +693,7 @@ begin
   if zend_parse_method_parameters(2, nil, 'zz', @Instance, @_File) = 0 then
   begin
 
-    FileStream := TFileStream.Create(ZvalGetStringA(_File),
+    FileStream := TFileStream.Create(ZvalGetString(_File),
       fmCreate or fmOpenWrite);
     try
       MemStream := TMemoryStream.Create;

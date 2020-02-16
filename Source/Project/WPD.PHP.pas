@@ -1,28 +1,39 @@
 unit WPD.PHP;
 
 interface
-
+{$INCLUDE wpdefines.inc}
 uses
   Windows, SysUtils,
+  {$IFDEF FPC}
+  LazUTF8,
+  LazUTF8Classes,
+  {$ENDIF}
   WideStrUtils, Variants,
   WPD.Zend.Types,
   WPD.Vis;
 
 const
   fso = {$IFDEF MSWINDOWS}'.dll'{$ELSE}'.so'{$ENDIF};
-
+  MSCRT = 'msvcrt.dll';
 var
   DllPHP: String;
   phpHandle: THandle = 0;
+  ZvalSetStr: procedure(Result: pzval; sr:UTF8String);
 procedure Load(LibraryName: String);
-
+function  strdup(strSource : PUTF8Char) : PUTF8Char; cdecl; external MSCRT name '_strdup';
 procedure ZVAL_TRUE(value: pzval);
 procedure ZVAL_FALSE(value: pzval);
 procedure ZvalVALStrNull(z: pzval); overload;
-procedure ZvalVAL(z: pzval; s: AnsiString; len: Integer = 0); overload;
+procedure ZvalVAL(z: pzval; s: {$ifdef fpc}String{$else}AnsiString{$endif}); overload;
+procedure ZvalVAL(z: pzval; s: WideString); overload;
+procedure ZvalVAL(z: pzval; s: UTF8String); overload;
 function ZendAlterIniEntry(name, new_value: PAnsiChar;
   modify_type, stage: Integer): Integer;
+{$IFDEF FPC}
+function zend_get_parameters_my(number: integer; var Params: specialize TArray<pzval>): integer;
+{$ELSE}
 function zend_get_parameters_my(number: integer; var Params: TArray<pzval>): integer;
+{$ENDIF}
 procedure ZvalHRESULTStr(z: pzval; h: HRESULT);
 
 function ZValGet(v: pzval; GetType: Integer): Variant;
@@ -43,8 +54,9 @@ function ZvalGetBool(v: pzval): Boolean;
 
 function ZvalGetString(z: pzval): WideString;
 function ZvalGetStringA(z: pzval): AnsiString;
+function ZvalGetStringU(z: pzval): UTF8String;
 function ZvalGetStringRaw(z: pzval): RawByteString;
-procedure ZvalSetStringRaw(z: pzval; s: RawByteString);
+
 function ZvalToVariant(v: pzval): Variant;
 function ZvalToPointer(v: pzval): Pointer;
 function ZValArrayKeyFind(v: pzval; key: AnsiString; out pData: ppzval)
@@ -54,15 +66,21 @@ function ZValArrayKeyFind(v: pzval; idx: Integer; out pData: ppzval)
 
 function GetArgPZval(Args: TVarRec; const _type: Integer = IS_LONG;
   Make: Boolean = false): pzval;
-procedure LoadPHPFunc(var Func: Pointer; FuncName: LPCSTR);
+{$ifdef fpc}
+function LoadPHPFunc(Func: PPointer; FuncName: LPCSTR; fault: boolean = true): Boolean;
+{$else}
+function LoadPHPFunc(var Func: Pointer; FuncName: LPCSTR; fault: boolean = true): Boolean;
+{$endif}
 procedure UnloadZEND;
 function PHPLibraryName(Instance: THandle; const DefaultName: PAnsiChar = nil)
   : PAnsiChar;
 function HRESULTStr(h: HRESULT): Pchar;
 function GetSAPIGlobals: Psapi_globals_struct;
+function GetCompilerGlobals:  P_zend_compiler_globals;
+function GetExecutorGlobals: P_zend_executor_globals;
 
-procedure zend_error_cb2(AType: Integer; const AFname: PAnsiChar;
-  const ALineNo: UINT; const AFormat: PAnsiChar; Args: va_list)cdecl;
+procedure zend_error_cb2(AType: Integer; const AFname: PUtf8Char;
+  const ALineNo: UINT; const AFormat: PUtf8Char; Args: va_list)cdecl;
 
 var
   sapi_globals_id: Pointer;
@@ -78,9 +96,27 @@ begin
     phpHandle := 0;
   end;
 end;
-
-procedure LoadPHPFunc(var Func: Pointer; FuncName: LPCSTR);
+{$IFDEF FPC}
+//Part of LazUtils, (c) 2006-2020 Lazarus Team
+//Unit LazUTF8
+//Function: IsASCII
+function IsUTF8String(const s: string): boolean; inline;
+var
+  i: Integer;
 begin
+  Result := False;
+  for i:=1 to length(s) do if ord(s[i])>255 then Exit(True);
+end;
+{$ENDIF}
+function LoadPHPFunc
+{$ifdef fpc}
+  (Func: PPointer; FuncName: LPCSTR; fault: boolean = true)
+{$else}
+  (var Func: Pointer; FuncName: LPCSTR; fault: boolean = true)
+{$endif}
+  : Boolean;
+begin
+  Result := True;
   if phpHandle = 0 then
     if FileExists(DllPHP + Fso) then
     begin
@@ -90,22 +126,31 @@ begin
       if phpHandle = 0 then
       begin
         WPD.Vis.Out(HRESULTStr(GetLastError) + #10#13 + '- ' + DllPHP + Fso);
-
+        Result := False;
         Halt;
       end;
     end;
 
+{$ifdef fpc}
+  Func^ := GetProcAddress(phpHandle, FuncName);
+  if not Assigned(Func^) then
+{$else}
   Func := GetProcAddress(phpHandle, FuncName);
   if not assigned(Func) then
+{$endif}
+  begin
+    if fault then
     MessageBoxW(0, PWideChar('Unable to link [' + FuncName + '] function'),
       'LoadFunction', 0);
+    Result := False;
+  end;
 end;
 
-procedure zend_error_cb2(AType: Integer; const AFname: PAnsiChar;
-  const ALineNo: UINT; const AFormat: PAnsiChar; Args: va_list)cdecl;
+procedure zend_error_cb2(AType: Integer; const AFname: PUTF8Char;
+  const ALineNo: UINT; const AFormat: PUTF8Char; Args: va_list)cdecl;
 var
   LText: string;
-  LBuffer: array [0 .. 4096] of AnsiChar;
+  LBuffer: array [0 .. 4096] of UTF8Char;
 begin
   case AType of
     E_ERROR:
@@ -141,7 +186,7 @@ begin
   end;
 
   wvsprintfA(LBuffer, AFormat, Args);
-  LText := LText + UTF8ToAnsi(AFname) + '(' + inttostr(ALineNo) + '): '
+  LText := LText + AFname + '(' + inttostr(ALineNo) + '): '
     + LBuffer;
   case AType of
     E_WARNING, E_CORE_WARNING, E_COMPILE_WARNING, E_USER_WARNING:
@@ -218,20 +263,52 @@ begin
     Result := strnew(PName);
 end;
 
-function emalloc(size: size_t): pointer;
+function zend_string_alloc(len: SIZE_T; persistent: boolean): Pzend_string;
 begin
-  Result := _emalloc(size, nil, 0, nil, 0);
+
+  Result := PZend_string(
+  pemalloc(ZEND_MM_ALIGNED_SIZE(_ZSTR_STRUCT_SIZE(len)), persistent)
+  );
+
+	Result^.gc.refcount := 1;
+  Result^.gc.u.v._type := IS_STRING;
+  if persistent  then
+    Result^.gc.u.v.flags := IS_STR_PERSISTENT
+  else
+     Result^.gc.u.v.flags := 0;
+  Result^.gc.u.v.gc_info := 0;
+
+	Result^.h := 0;
+  Result^.len := len;
 end;
 
-procedure efree(ptr: pointer);
+procedure ZvalSetStrDef(Result: pzval; sr:UTF8String);
 begin
-  _efree(ptr, nil, 0, nil, 0);
+  Result^.value.str := zend_string_alloc(Length(sr), true);
+  if Length(sr) = 0 then
+    Exit;
+  CopyMemory(@Result^.value.str^.val[0], @sr[1], Result^.value.str^.len);
+  Result^.u1.type_info := IS_STRING_EX;
+end;
+
+procedure ZvalSetStrHk(Result: pzval; sr:UTF8String);
+begin
+  ZvalSetPChar(Result, PUTF8Char(sr), Length(sr), 1);
+end;
+
+procedure ZvalCopyStr(Text: pzval; var s: UTF8String);
+begin
+  if Text^.u1.v._type <> IS_STRING then
+    Exit;
+
+  SetLength(s, Text^.value.str^.len);
+
+  if Text^.value.str^.len = 0 then
+    Exit;
+  Move(Text^.value.str^.val[0], s[1], Text^.value.str^.len);
 end;
 function ZvalGetStringRaw(z: pzval): RawByteString;
-{$ifdef fpc}
-var
-  s_len: SizeInt;
-{$endif}
+var s: UTF8String;
 begin
   Result := '';
   case z^.u1.v._type of
@@ -245,7 +322,8 @@ begin
       Result := RawByteString(FloatToStr(z^.value.dval));
     IS_STRING:
       begin
-        SetString(Result, ZvalGetPChar(z), z^.value.str^.len);
+        ZvalCopyStr(z, s);
+        Result := RawByteString(s);
         SetCodePage(Result, CP_UTF8, not IsUTF8String(Result));
       end;
     IS_ARRAY:
@@ -262,16 +340,37 @@ begin
   Result := WideString(ZvalGetStringRaw(z));
 end;
 
+function ZvalGetStringU(z: pzval): UTF8String;
+begin
+  ZvalCopyStr(z, Result);
+end;
+
 function ZvalGetStringA(z: pzval): AnsiString;
 begin
   Result := ZvalGetStringRaw(z);
 end;
-
-procedure ZvalSetStringRaw(z: pzval; s: RawByteString);
+function estrndup(s: PUTF8Char; len: Cardinal): PUTF8Char;
 begin
-  SetCodePage(s, CP_UTF8, not IsUTF8String(s));
-  ZvalSetPChar(z, PAnsiChar(AnsiString(s)), Length(s), 1);
+  if assigned(s) then
+    Result := _estrndup(s, len, nil, 0, nil, 0)
+     else
+      Result := nil;
 end;
+function  DupStr(strSource : PUtf8Char) : Putf8Char; cdecl;
+var
+  P : PUTF8Char;
+begin
+
+  if (strSource = nil) then
+     P := nil
+       else
+         begin
+           P := StrNew(strSource);
+         end;
+  Result := P;
+end;
+
+
 
 function ZvalToPointer(v: pzval): Pointer;
 begin
@@ -286,7 +385,7 @@ begin
       Result := Pointer(Round(v^.value.dval));
     IS_STRING:
       try
-        Result := Pointer(String(ZvalGetPChar(v)));
+        Result := Pointer(ZvalGetString(v));
       except
         on E: EConvertError do
           Result := nil;
@@ -313,7 +412,7 @@ begin
       Result := Round(v^.value.dval);
     IS_STRING:
       try
-        Result := AnsiString(ZvalGetPChar(v))
+        Result := ZvalGetStringA(v)
       except
         on E: EConvertError do
           Result := '';
@@ -345,7 +444,7 @@ begin
       Result := Round(v^.value.dval);
     IS_STRING:
       try
-        Result := StrToInt(string(ZvalGetPChar(v)))
+        Result := StrToInt(ZvalGetString(v))
       except
         on E: EConvertError do
           Result := 0;
@@ -374,7 +473,7 @@ begin
       Result := v^.value.dval;
     IS_STRING:
       try
-        Result := strtofloat(string(ZvalGetPChar(v)));
+        Result := strtofloat(ZvalGetString(v));
       except
         on E: EConvertError do
           Result := 0;
@@ -395,7 +494,7 @@ begin
       Result := Boolean(Round(v^.value.dval));
     IS_STRING:
       try
-        Result := StrToBool(string(ZvalGetPChar(v)));
+        Result := StrToBool(ZvalGetString(v));
       except
         on E: EConvertError do
           Result := false;
@@ -490,26 +589,33 @@ end;
 
 procedure ZvalVALStrNull(z: pzval);
 begin
-  ZvalSetPChar(z, '', 0, 0);
+  ZvalSetStr(z, '');
 end;
 
-procedure ZvalVAL(z: pzval; s: AnsiString; len: Integer = 0);
-var
-  lem: Integer;
+procedure ZvalVAL(z: pzval; s: {$ifdef fpc}String{$else}AnsiString{$endif});overload;
 begin
-  lem := Length(s);
+  ZvalSetStr(z, UTF8String(s));
+end;
 
-  if lem <> 0 then
-    ZvalSetPChar(z, PAnsiChar(s), lem, 1)
-  else
-    ZvalSetPChar(z, '', 0, 0);
+procedure ZvalVAL(z: pzval; s: WideString);overload;
+begin
+ ZvalSetStr(z, UTF8String(s));
+end;
+
+procedure ZvalVAL(z: pzval; s: UTF8String);overload;
+begin
+  ZvalSetStr(z, s);
 end;
 
 procedure ZvalHRESULTStr(z: pzval; h: HRESULT);
 begin
 
 end;
+{$ifdef fpc}
+function zend_get_parameters_my(number: integer; var Params: specialize TArray<pzval>): integer;
+{$else}
 function zend_get_parameters_my(number: integer; var Params:TArray<pzval>): integer;
+{$endif}
 var
   i  : integer;
 
@@ -542,7 +648,12 @@ end;
 function GetArgPZval(Args: TVarRec; const _type: Integer = IS_LONG;
   Make: Boolean = false): pzval;
 begin
+  New(Result);
+  {$ifdef fpc}
+  if Args.VPointer = nil then
+  {$else}
   if Args._Reserved1 = 0 then // nil
+  {$endif}
   begin
     Result^.u1.type_info := IS_NULL;
     Result^.u1.v._type := IS_NULL;
@@ -560,50 +671,53 @@ begin
         ZvalVAL(Result, Args.VBoolean);
       vtExtended:
         ZvalVAL(Result, Args.VExtended^);
+      {$ifdef fpc}
+      vtClass:
+        ZvalVal(Result, IntPtr(@Args.VClass));
+      vtObject:
+        ZvalVal(Result, IntPtr(@Args.VObject));
+      {$else}
       vtClass, vtObject:
         ZvalVAL(Result, Args._Reserved1);
+      {$endif}
       vtString:
         ZvalVAL(Result, AnsiString(Args.VString^));
       vtAnsiString:
-        ZvalVAL(Result, PAnsiChar(Args.VAnsiString));
+        ZvalVAL(Result, AnsiString(PAnsiChar(Args.VAnsiString)));
+      {$ifdef fpc}
+      vtUnicodeString:
+        ZvalVal(Result, UnicodeString(Args.VUnicodeString));
+      {$else}
       vtUnicodeString:
         ZvalVAL(Result, UnicodeString(Args._Reserved1));
+      {$endif}
       vtWideChar:
-        ZvalVAL(Result, AnsiString(Args.VWideChar));
+        ZvalVAL(Result, WideString(Args.VWideChar));
       vtChar:
-        ZvalVAL(Result, Args.VChar);
+        ZvalVAL(Result, String(Args.VChar));
       vtPWideChar:
-        ZvalVAL(Result, Args.VPWideChar);
+        ZvalVAL(Result, WideString(Args.VPWideChar));
       vtPChar:
-        ZvalVAL(Result, Args.VPChar);
+        ZvalVAL(Result, String(Char(Args.VPChar)));
       vtWideString:
         ZvalVAL(Result, PWideChar(Args.VWideString));
     end;
   end;
 end;
 
-function __fgsapiasm(sapi_globals_value:WPD.Zend.Types.IntPtr; tsrmls_dc:pointer): WPD.Zend.Types.IntPtr; assembler; register;
-asm
-{$IFDEF CPUX64}
-      mov rcx, sapi_globals_value
-      mov rdx, dword64 ptr tsrmls_dc
-      mov rax, dword64 ptr [rdx]
-      mov rcx, dword64 ptr [rax+rcx*8-8]
-      mov Result, rcx
-{$ELSE}
-      mov ecx, sapi_globals_value
-      mov edx, dword ptr tsrmls_dc
-      mov eax, dword ptr [edx]
-      mov ecx, dword ptr [eax+ecx*4-4]
-      mov Result, ecx
-{$ENDIF}
+function __fgsapi(sapi_globals_value:WPD.Zend.Types.IntPtr; tsrmls_dc:pointer): WPD.Zend.Types.IntPtr;
+type P = ^IntPtr;
+     PP = ^P;
+begin
+  Result := PP(tsrmls_dc)^^ + sapi_globals_value*Sizeof(Pointer) - Sizeof(Pointer);
 end;
+
 function GetSAPIGlobals: Psapi_globals_struct;
 begin
   Result := nil;
   if assigned(sapi_globals_id) then
   begin
-    Result := Psapi_globals_struct(__fgsapiasm(IntPtr(sapi_globals_id^), ts_resource_ex(0, nil)));
+    Result := Psapi_globals_struct(__fgsapi(IntPtr(sapi_globals_id^), ts_resource_ex(0, nil)));
   end;
 end;
 
@@ -616,40 +730,12 @@ begin
     global_id := GetProcAddress(phpHandle, PAnsiChar(resource_name));
     if assigned(global_id) then
     begin
-      Result := Pointer(__fgsapiasm(IntPtr(global_id^), ts_resource_ex(0, nil)));
+      Result := Pointer(__fgsapi(IntPtr(global_id^), ts_resource_ex(0, nil)));
     end;
   except
     Result := nil;
   end;
 end;
-{ function GetGlobalResource(resource_name: AnsiString) : pointer;
-  var
-  global_id : pointer;
-  global_value : integer;
-  global_ptr   : pointer;
-  tsrmls_dc : pointer;
-  begin
-  Result := nil;
-  try
-  global_id := GetProcAddress(phpHandle, PAnsiChar(resource_name));
-  if Assigned(global_id) then
-  begin
-  tsrmls_dc := ts_resource_ex(0, nil);
-  global_value := integer(global_id^);
-  asm
-  mov ecx, global_value
-  mov edx, dword ptr tsrmls_dc
-  mov eax, dword ptr [edx]
-  mov ecx, dword ptr [eax+ecx*4-4]
-  mov global_ptr, ecx
-  end;
-  Result := global_ptr;
-  end else
-  ShowMessage('GetGlobalResource - nil');
-  except
-  Result := nil;
-  end;
-  end; }
 
 function GetCompilerGlobals: P_zend_compiler_globals;
 begin
@@ -690,7 +776,7 @@ begin
   // Result := zend_hash_quick_find(v.value.ht, nil, 0, idx, pData) = SUCCESS;
 end;
 
-procedure Load;
+procedure Load(LibraryName: String);
 begin
 DllPHP := LibraryName;
 LoadPHPFunc(@tsrm_set_new_thread_begin_handler,
@@ -1673,9 +1759,10 @@ LoadPHPFunc(@zend_hash_index_findZval, 'zend_hash_index_findZval');
 LoadPHPFunc(@zend_symtable_findTest, 'zend_symtable_findTest');
 LoadPHPFunc(@zend_hash_index_existsZval, 'zend_hash_index_existsZval');
 
-LoadPHPFunc(@ZvalGetPChar, 'ZvalGetPChar');
-LoadPHPFunc(@ZvalSetPChar, 'ZvalSetPChar');
-LoadPHPFunc(@ZvalSetPtChar, 'ZvalSetPChar');
+if LoadPHPFunc(@ZvalSetPChar, 'ZvalSetPChar', false) then
+  ZvalSetStr := @ZvalSetStrHk
+Else
+  ZvalSetStr := @ZvalSetStrDef;
 
 LoadPHPFunc(@read_property22, 'read_property22');
 

@@ -1,0 +1,235 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CONFIG>
+  <ProjectSession>
+    <PathDelim Value="\"/>
+    <Version Value="12"/>
+    <BuildModes Active="x32">
+      <Item Name="x32">
+        <CompilerOptions>
+          <Version Value="11"/>
+          <PathDelim Value="\"/>
+          <Target>
+            <Filename Value="wpd"/>
+          </Target>
+          <SearchPaths>
+            <IncludeFiles Value="$(ProjOutDir)"/>
+            <OtherUnitFiles Value="\Project"/>
+            <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)"/>
+          </SearchPaths>
+          <CodeGeneration>
+            <TargetCPU Value="i386"/>
+            <TargetOS Value="win32"/>
+          </CodeGeneration>
+          <Linking>
+            <Options>
+              <Win32>
+                <GraphicApplication Value="True"/>
+              </Win32>
+            </Options>
+          </Linking>
+        </CompilerOptions>
+      </Item>
+    </BuildModes>
+    <Units>
+      <Unit>
+        <Filename Value="wpd.lpr"/>
+        <IsPartOfProject Value="True"/>
+        <TopLine Value="28"/>
+        <CursorPos X="36" Y="107"/>
+        <UsageCount Value="66"/>
+        <Loaded Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="unit1.pas"/>
+        <IsPartOfProject Value="True"/>
+        <ComponentName Value="Form1"/>
+        <ResourceBaseClass Value="Form"/>
+        <UnitName Value="Unit1"/>
+        <EditorIndex Value="-1"/>
+        <TopLine Value="21"/>
+        <CursorPos X="19" Y="24"/>
+        <UsageCount Value="66"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\SourceLaz\__wpd.pas"/>
+        <EditorIndex Value="-1"/>
+        <TopLine Value="19"/>
+        <CursorPos Y="25"/>
+        <UsageCount Value="16"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\SourceLaz\Project\WPD.Zend.Types.pas"/>
+        <EditorIndex Value="-1"/>
+        <TopLine Value="634"/>
+        <CursorPos X="19" Y="645"/>
+        <UsageCount Value="6"/>
+      </Unit>
+      <Unit>
+        <Filename Value="C:\fpcupdeluxe\fpcsrc\rtl\win\sysosh.inc"/>
+        <EditorIndex Value="-1"/>
+        <CursorPos X="12" Y="26"/>
+        <UsageCount Value="6"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\SourceLaz\Project\WPD.Vis.pas"/>
+        <EditorIndex Value="-1"/>
+        <CursorPos X="10" Y="15"/>
+        <UsageCount Value="6"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\SourceLaz\wpdefines.inc"/>
+        <EditorIndex Value="-1"/>
+        <CursorPos X="49" Y="3"/>
+        <UsageCount Value="6"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\SourceLaz\Project\WPD.Engine.pas"/>
+        <EditorIndex Value="-1"/>
+        <TopLine Value="12"/>
+        <CursorPos X="25" Y="22"/>
+        <UsageCount Value="6"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\SourceLaz\Project\WPD.Classes.pas"/>
+        <EditorIndex Value="-1"/>
+        <TopLine Value="33"/>
+        <CursorPos X="11" Y="51"/>
+        <UsageCount Value="6"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\SourceLaz\Project\WPD.PHP.pas"/>
+        <EditorIndex Value="-1"/>
+        <TopLine Value="240"/>
+        <CursorPos X="59" Y="246"/>
+        <UsageCount Value="6"/>
+      </Unit>
+      <Unit>
+        <Filename Value="Project\WPD.Engine.pas"/>
+        <EditorIndex Value="7"/>
+        <TopLine Value="137"/>
+        <CursorPos Y="149"/>
+        <UsageCount Value="33"/>
+        <Loaded Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="Project\WPD.Vis.pas"/>
+        <EditorIndex Value="6"/>
+        <CursorPos X="9" Y="7"/>
+        <UsageCount Value="32"/>
+        <Loaded Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="Project\WPD.PHP.pas"/>
+        <EditorIndex Value="3"/>
+        <TopLine Value="126"/>
+        <CursorPos X="30" Y="132"/>
+        <UsageCount Value="31"/>
+        <Loaded Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="C:\fpcupdeluxe\lazarus\components\lazutils\lazutf8sysutils.pas"/>
+        <UnitName Value="LazUTF8SysUtils"/>
+        <EditorIndex Value="-1"/>
+        <TopLine Value="17"/>
+        <UsageCount Value="6"/>
+      </Unit>
+      <Unit>
+        <Filename Value="C:\fpcupdeluxe\lazarus\components\lazutils\utf8process.pp"/>
+        <UnitName Value="UTF8Process"/>
+        <EditorIndex Value="-1"/>
+        <CursorPos X="17" Y="2"/>
+        <UsageCount Value="6"/>
+      </Unit>
+      <Unit>
+        <Filename Value="C:\fpcupdeluxe\lazarus\components\lazutils\lazutf8classes.pas"/>
+        <UnitName Value="LazUTF8Classes"/>
+        <EditorIndex Value="-1"/>
+        <TopLine Value="173"/>
+        <UsageCount Value="6"/>
+      </Unit>
+      <Unit>
+        <Filename Value="C:\fpcupdeluxe\lazarus\components\lazutils\lazutf8.pas"/>
+        <UnitName Value="LazUTF8"/>
+        <EditorIndex Value="5"/>
+        <CursorPos X="9" Y="225"/>
+        <UsageCount Value="32"/>
+        <Loaded Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="C:\fpcupdeluxe\fpcsrc\packages\rtl-objpas\src\inc\widestrutils.pp"/>
+        <UnitName Value="WideStrUtils"/>
+        <EditorIndex Value="2"/>
+        <TopLine Value="37"/>
+        <UsageCount Value="32"/>
+        <Loaded Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="unit2.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="Unit2"/>
+        <EditorIndex Value="1"/>
+        <CursorPos X="21" Y="8"/>
+        <UsageCount Value="63"/>
+        <Loaded Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="Project\WPD.RTTI.Procedures.pas"/>
+        <IsVisibleTab Value="True"/>
+        <EditorIndex Value="4"/>
+        <CursorPos X="12" Y="8"/>
+        <UsageCount Value="10"/>
+        <Loaded Value="True"/>
+      </Unit>
+    </Units>
+    <JumpHistory Count="11" HistoryIndex="10">
+      <Position1>
+        <Filename Value="unit2.pas"/>
+        <Caret Line="8" Column="21"/>
+      </Position1>
+      <Position2>
+        <Filename Value="C:\fpcupdeluxe\fpcsrc\packages\rtl-objpas\src\inc\widestrutils.pp"/>
+        <Caret TopLine="37"/>
+      </Position2>
+      <Position3>
+        <Filename Value="Project\WPD.PHP.pas"/>
+        <Caret Line="731" Column="35" TopLine="723"/>
+      </Position3>
+      <Position4>
+        <Filename Value="Project\WPD.PHP.pas"/>
+        <Caret Line="105" Column="54" TopLine="96"/>
+      </Position4>
+      <Position5>
+        <Filename Value="Project\WPD.PHP.pas"/>
+        <Caret Line="3" Column="10"/>
+      </Position5>
+      <Position6>
+        <Filename Value="Project\WPD.PHP.pas"/>
+        <Caret Line="17" TopLine="8"/>
+      </Position6>
+      <Position7>
+        <Filename Value="Project\WPD.PHP.pas"/>
+        <Caret Line="117" TopLine="113"/>
+      </Position7>
+      <Position8>
+        <Filename Value="Project\WPD.PHP.pas"/>
+        <Caret Line="5" Column="5"/>
+      </Position8>
+      <Position9>
+        <Filename Value="Project\WPD.PHP.pas"/>
+        <Caret Line="68" Column="23" TopLine="58"/>
+      </Position9>
+      <Position10>
+        <Filename Value="Project\WPD.PHP.pas"/>
+        <Caret Line="70" Column="36" TopLine="58"/>
+      </Position10>
+      <Position11>
+        <Filename Value="Project\WPD.PHP.pas"/>
+        <Caret Line="132" Column="30" TopLine="126"/>
+      </Position11>
+    </JumpHistory>
+    <RunParams>
+      <FormatVersion Value="2"/>
+      <Modes Count="0" ActiveMode=""/>
+    </RunParams>
+  </ProjectSession>
+</CONFIG>

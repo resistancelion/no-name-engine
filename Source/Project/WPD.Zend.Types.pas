@@ -6,7 +6,7 @@ uses Windows;
 {$ELSE}
 uses WinAPI.Windows;
 {$ENDIF}
-
+{$DEFINE CPP_ABI_SUPPORT}
 var
  _TestCreate:Pointer;
 
@@ -98,7 +98,7 @@ Z_CONST_FLAGS_SHIFT	 =		16;
 
 
   IS_STRING_EX = IS_STRING or ((IS_TYPE_REFCOUNTED or IS_TYPE_COPYABLE) shl Z_TYPE_FLAGS_SHIFT);
-
+  IS_STR_PERSISTENT = 1 shl 0;
 
 
   SUCCESS = 0;
@@ -634,13 +634,12 @@ Pzend_ptr_stack = ^zend_ptr_stack;
     end;
  zend_refcounted = _zend_refcounted;
 
-
-
+  _uchar = array[0..0] of UTF8Char;
   _zend_string = record
       gc : zend_refcounted_h;
       h : zend_ulong;
       len : size_t;
-      val : PAnsiChar;
+      val : _uchar; //putf8char
     end;
     zend_string = _zend_string;
 
@@ -1409,7 +1408,6 @@ end;
       ast : P_zend_ast;
     end;
    zend_ast_ref = _zend_ast_ref;
-
 
   zend_object_read_property_t = function (_object:pzval; member:pzval; _type:longint; cache_slot:ppointer; rv:pzval):Pzval;cdecl;
 
@@ -2390,7 +2388,7 @@ _erealloc2:function(ptr:Ppointer; size:size_t; copy_size:size_t; __zend_filename
 _safe_erealloc:function(ptr:Ppointer; nmemb:size_t; size:size_t; offset:size_t; __zend_filename:PAnsiChar; __zend_lineno:uint; __zend_orig_filename:PAnsiChar; __zend_orig_lineno:uint):pointer; cdecl;
 _safe_realloc:function(ptr:Ppointer; nmemb:size_t; size:size_t; offset:size_t):pointer; cdecl;
 _estrdup:function(s:PAnsiChar; __zend_filename:PAnsiChar; __zend_lineno:uint; __zend_orig_filename:PAnsiChar; __zend_orig_lineno:uint):PAnsiChar; cdecl;
-_estrndup:function(s:PAnsiChar; length:size_t; __zend_filename:PAnsiChar; __zend_lineno:uint; __zend_orig_filename:PAnsiChar; __zend_orig_lineno:uint):PAnsiChar; cdecl;
+_estrndup:function(s:PUTF8Char; length:size_t; __zend_filename:PUTF8Char; __zend_lineno:uint; __zend_orig_filename:PUTF8Char; __zend_orig_lineno:uint):PUTF8Char; cdecl;
 _zend_mem_block_size:function(ptr:Ppointer; __zend_filename:PAnsiChar; __zend_lineno:uint; __zend_orig_filename:PAnsiChar; __zend_orig_lineno:uint):size_t; cdecl;
 _emalloc_large:function(size:size_t):pointer; cdecl;
 _emalloc_huge:function(size:size_t):pointer; cdecl;
@@ -2864,6 +2862,7 @@ zend_set_user_opcode_handler:function(opcode:zend_uchar; handler:user_opcode_han
 zend_get_user_opcode_handler:function(opcode:zend_uchar):user_opcode_handler_t; cdecl;
 zend_get_zval_ptr:function(op_type:longint; node:Pznode_op; execute_data:Pzend_execute_data; should_free:Pzend_free_op; _type:longint):Pzval; cdecl;
 zend_clean_and_cache_symbol_table:procedure(symbol_table:Pzend_array); cdecl;
+
 zend_objects_store_init:procedure(objects:Pzend_objects_store; init_size:uint32_t); cdecl;
 zend_objects_store_call_destructors:procedure(objects:Pzend_objects_store); cdecl;
 zend_objects_store_mark_destructed:procedure(objects:Pzend_objects_store); cdecl;
@@ -3084,9 +3083,8 @@ zend_locale_sprintf_double:procedure(op:Pzval; __zend_filename:Pchar; __zend_lin
 zend_update_current_locale:procedure; cdecl;
 zend_long_to_str:function(num:zend_long):Pzend_string; cdecl;
 
-ZvalGetPChar:function(z:pzval):PAnsiChar; cdecl;
-ZvalSetPChar:procedure(z:pzval; p:PAnsiChar; l, b:integer); cdecl;
-ZvalSetPtChar:procedure(z:pzval; p:PWideChar; l, b:integer); cdecl;
+ZvalSetPChar:procedure(z:pzval; p:PUTF8Char; l, b:integer); cdecl;
+
 read_property22:function(elem:pzval; name:PAnsiChar; flags:Integer):pzval;   cdecl;
 isset_property:function(_object:pzval; property_name:PAnsiChar):Integer;    cdecl;
 
@@ -3109,11 +3107,46 @@ pZVAL_NEW_REF:procedure(arg1, arg2:pointer);cdecl;
 
 NewPzval:function(z:pzval):pzval;cdecl;
 
-CreateCll:function(result:pzval; class_name:PAnsiChar; Self:integer):pzval;cdecl;
+CreateCll:function(result:pzval; class_name:PUTF8Char; Self:integer):pzval;cdecl;
 
 PHPInitSetValue:procedure(name, new_value:PAnsiChar; modify_type, stage:integer);cdecl;
-
+const
+   ZEND_MM_ALIGNMENT = SizeOf(Pointer);
+   ZEND_MM_ALIGNMENT_MASK = Not(ZEND_MM_ALIGNMENT - 1);
+function _ZSTR_STRUCT_SIZE(len: IntPtr): size_t;
+function ZEND_MM_ALIGNED_SIZE(size: intPtr): size_t;
+function pemalloc(s: size_t; persistent: boolean): Pointer;
+function emalloc(s: size_t): Pointer;
+procedure efree(ptr: pointer);
 implementation
+  function emalloc(s: size_t): Pointer;
+  begin
+      _emalloc(s, nil, 0, nil, 0);
+  end;
+  procedure efree(ptr: pointer);
+  begin
+    _efree(ptr, nil, 0, nil, 0);
+  end;
+  function pemalloc(s: size_t; persistent:boolean): Pointer;
+  begin
+    if persistent then
+      Result := __zend_malloc(s)
+    Else
+      Result := emalloc(s);
+  end;
 
+  function ZEND_MM_ALIGNED_SIZE(size: intPtr): size_t;
+  begin
+    	Result := ((size) + ZEND_MM_ALIGNMENT - NativeUint(1)) and ZEND_MM_ALIGNMENT_MASK;
+  end;
+  function _ZSTR_HEADER_SIZE: size_t;
+  begin
+    Result := NativeUInt(@_zend_string(nil^).val);
+  end;
+
+  function _ZSTR_STRUCT_SIZE(len: IntPtr): size_t;
+  begin
+    Result := NativeUInt(@_zend_string(nil^).val) + len + NativeUint(1);
+  end;
 
 end.
