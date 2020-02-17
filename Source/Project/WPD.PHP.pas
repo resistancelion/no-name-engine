@@ -78,7 +78,9 @@ function HRESULTStr(h: HRESULT): Pchar;
 function GetSAPIGlobals: Psapi_globals_struct;
 function GetCompilerGlobals:  P_zend_compiler_globals;
 function GetExecutorGlobals: P_zend_executor_globals;
-
+function EG: P_zend_executor_globals;
+ function ZEND_CALL_VAR_NUM(call: pointer; n: IntPtr): pzval;
+ function ZEND_CALL_ARG(call: pointer; n: IntPtr): pzval;
 procedure zend_error_cb2(AType: Integer; const AFname: PUtf8Char;
   const ALineNo: UINT; const AFormat: PUtf8Char; Args: va_list)cdecl;
 
@@ -707,9 +709,8 @@ end;
 
 function __fgsapi(sapi_globals_value:WPD.Zend.Types.IntPtr; tsrmls_dc:pointer): WPD.Zend.Types.IntPtr;
 type P = ^IntPtr;
-     PP = ^P;
 begin
-  Result := PP(tsrmls_dc)^^ + sapi_globals_value*Sizeof(Pointer) - Sizeof(Pointer);
+  Result := P( P(tsrmls_dc)^ + sapi_globals_value*Sizeof(Pointer) - Sizeof(Pointer))^;
 end;
 
 function GetSAPIGlobals: Psapi_globals_struct;
@@ -747,6 +748,26 @@ begin
   Result := GetGlobalResource('executor_globals_id');
 end;
 
+  //#ifdef ZTS
+  //# define EG(v) ZEND_TSRMG(executor_globals_id, zend_executor_globals *, v)
+  //#else
+  //# define EG(v) (executor_globals.v)
+  //function EGZts(v): pointer;
+  //begin
+
+  //end;
+  function EG: P_zend_executor_globals;
+  begin
+    Result := GetGlobalResource('executor_globals_id');
+  end;
+  function ZEND_CALL_VAR_NUM(call: pointer; n: IntPtr): pzval;
+  begin
+    Result := pzval((IntPtr(pzval(call))) + (ZEND_CALL_FRAME_SLOT + IntPtr(n)));
+  end;
+  function ZEND_CALL_ARG(call: pointer; n: IntPtr): pzval;
+  begin
+    Result := ZEND_CALL_VAR_NUM(call, n - 1);
+  end;
 function GetAllocGlobals: Pointer;
 begin
   Result := GetGlobalResource('alloc_globals_id');

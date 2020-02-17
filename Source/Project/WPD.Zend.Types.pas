@@ -2541,7 +2541,7 @@ zend_mm_startup_ex:function(handlers:Pzend_mm_handlers; data:Ppointer; data_size
 	zend_get_parameters:function(ht:longint; param_count:longint):longint; cdecl varargs;
 	zend_get_parameters_ex:function(param_count:longint):longint; cdecl varargs;
    ZvalGetArgs: function(Count: Integer; Args: ppzval): Integer;cdecl varargs;
-	_zend_get_parameters_array_ex:function(param_count:longint; argument_array:Pzval):longint; cdecl;
+	_zend_get_parameters_array_ex:function(param_count:longint; argument_array:pointer):longint; cdecl;
 	zend_copy_parameters_array:function(param_count:longint; argument_array:Pzval):longint; cdecl;
 	zend_parse_parameters:function(num_args:longint; type_spec:PAnsiChar):longint; cdecl varargs;
 	zend_parse_parameters_ex:function(flags:longint; num_args:longint; type_spec:PAnsiChar):longint; cdecl varargs;
@@ -3113,11 +3113,17 @@ PHPInitSetValue:procedure(name, new_value:PAnsiChar; modify_type, stage:integer)
 const
    ZEND_MM_ALIGNMENT = SizeOf(Pointer);
    ZEND_MM_ALIGNMENT_MASK = Not(ZEND_MM_ALIGNMENT - 1);
-function _ZSTR_STRUCT_SIZE(len: IntPtr): size_t;
-function ZEND_MM_ALIGNED_SIZE(size: intPtr): size_t;
+
 function pemalloc(s: size_t; persistent: boolean): Pointer;
 function emalloc(s: size_t): Pointer;
 procedure efree(ptr: pointer);
+
+function _ZSTR_STRUCT_SIZE(len: IntPtr): size_t;
+function ZEND_MM_ALIGNED_SIZE(size: intPtr): size_t;
+
+function ZEND_CALL_FRAME_SLOT: IntPtr;
+
+function ArgsCount(ED: Pzend_execute_data): Cardinal;
 implementation
   function emalloc(s: size_t): Pointer;
   begin
@@ -3149,4 +3155,16 @@ implementation
     Result := NativeUInt(@_zend_string(nil^).val) + len + NativeUint(1);
   end;
 
+  function ZEND_CALL_FRAME_SLOT: IntPtr;
+  begin
+  	Result := (IntPtr(ZEND_MM_ALIGNED_SIZE(sizeof(zend_execute_data)) + ZEND_MM_ALIGNED_SIZE(sizeof(zval)) - 1) DIV ZEND_MM_ALIGNED_SIZE(sizeof(zval)));
+  end;
+
+  function ArgsCount(ED: Pzend_execute_data): Cardinal;
+  begin
+    if ED = nil then
+      Exit(0);
+
+    Result := Ed.This.u2.num_args
+  end;
 end.

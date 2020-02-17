@@ -12,6 +12,9 @@ function pre(...$a) {
 	if(count($a) == 1) $a = $a[0];
 	Message(print_r($a, true));
 }
+$s = 0;
+settest($s);
+pre($s);
 $Application = new TApplication([NULL]);
 $Application->Initialize();
 $Form = new TForm([NULL]);

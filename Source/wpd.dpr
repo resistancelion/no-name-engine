@@ -56,6 +56,13 @@ begin
     s := '🐆🐆🐆 .-=WPD=-. 🐆🐆🐆';
     ZvalSetStr(return_value, s);
 end;
+procedure t_set(execute_data: Pzend_execute_data;
+  return_value: Pzval); cdecl;
+  var Text: pzval;
+    p: pzval;
+begin
+  ShowMessage( 'Function count:'+ inttostr(EG.function_table.nNumOfElements) );
+end;
 
 type
   PTEventBase = ^TEventBase;
@@ -129,7 +136,7 @@ begin
 
     PEngineLik.addFunc('Message', @TestMessage);
     PEngineLik.addFunc('test', @t_, 1);
-
+    PEngineLik.addFunc('settest', @t_set, 1);
     PEngineLik.addFunc('GUILoadComponentFromTextFile',
       @GUILoadComponentFromTextFile);
     PEngineLik.addFunc('GUIComponentToString', @GUIComponentToString);
