@@ -19,4 +19,4 @@ Delphi 10.1 and upper
 
 Nikita Frolov -- main
 
-Lev Zenin -- patches
+Leo -- patches
